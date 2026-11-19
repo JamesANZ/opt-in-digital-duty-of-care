@@ -1,19 +1,35 @@
 /**
- * Platform-neutral RPC surface. Every shell (Electron main, Android engine WebView,
- * iOS engine WKWebView) forwards page-agent and dashboard messages to `handle`.
+ * @title Engine RPC
+ * @notice The methods every shell forwards from a page or the dashboard.
+ * @dev Electron, Android, and iOS all call `handle`. Page callers are limited to `PAGE_METHODS`.
  */
 import { Engine } from './engine';
 import { makeProfile, hashPin, verifyPin, ProfileKind, Settings } from './profiles';
 import { checkUrl } from './rules';
 
+/**
+ * @notice One call into the engine.
+ */
 export interface RpcMessage { method: string; params?: any }
 
-/** Methods a page (untrusted origin) may call. Everything else is dashboard-only. */
+/**
+ * @notice Methods an untrusted page may call. Everything else is dashboard-only.
+ */
 export const PAGE_METHODS = new Set(['classify', 'tag', 'override', 'pageConfig', 'checkUrl']);
 
-/** Dashboard methods that change settings. Locked (child/teen) profiles need the parent PIN session. */
+/**
+ * @notice Dashboard methods that change settings.
+ * @dev A locked child or teen profile rejects these until the parent PIN session is unlocked.
+ */
 const GUARDED = new Set(['updateSetting', 'updateDesign', 'updateProfile', 'setSettings', 'addCustomCategory', 'removeCustomCategory', 'deleteExample', 'clearDecisions', 'addProfile', 'wipe']);
 
+/**
+ * @notice Dispatch one RPC call.
+ * @param engine Engine for the active profile.
+ * @param msg Method name and parameters.
+ * @param opts `trusted` is true for the dashboard. `unlocked` is true during a parent PIN session.
+ * @return The method result. Throws for an unknown method, a page calling a dashboard method, or a locked profile.
+ */
 export async function handle(engine: Engine, msg: RpcMessage, opts: { trusted: boolean; unlocked?: boolean }): Promise<any> {
   const p = msg.params ?? {};
   if (!opts.trusted && !PAGE_METHODS.has(msg.method)) throw new Error(`Method ${msg.method} not allowed from pages`);

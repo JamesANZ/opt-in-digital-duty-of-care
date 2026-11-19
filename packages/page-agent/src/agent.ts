@@ -1,16 +1,22 @@
 /**
- * DDoC page agent. Injected at document start into every frame on every platform.
- * Finds content blocks, asks the engine for decisions, applies blur/label/hide/interstitial,
- * enforces design restrictions, and lets the user teach the engine by selecting text.
+ * @title Page agent
+ * @notice Injected at document start into every frame. Finds blocks, asks the engine, and applies the decision.
+ * @dev Also enforces feed controls and opens the teach dialog when the user selects text.
  */
 import { checkUrl } from '../../core/src/rules';
 import { AGENT_CSS } from './styles';
 import { adapterFor, GENERIC_SELECTORS } from './sites';
 
+/**
+ * @notice The decision fields the agent needs in order to render a block.
+ */
 type Decision = {
   id: string; action: string; categoryId?: string; categoryLabel?: string; confidence: number; stage: string;
   reason: string; resources?: { name: string; phone?: string; url: string }[]; noReveal?: boolean; context?: string;
 };
+/**
+ * @notice Profile, design controls, and categories returned by `pageConfig`.
+ */
 type PageConfig = {
   profileKind: 'adult' | 'teen' | 'child'; profileName: string;
   design: { hideRecommendations: boolean; stopInfiniteScroll: boolean; scrollLimit: number; hideEngagementCounts: boolean; hideEphemeral: boolean; disableAutoplay: boolean; preferFollowingFeed: boolean };
@@ -34,6 +40,12 @@ w.__ddocResolve = (id: number, ok: boolean, payload: string) => {
   ok ? p.res(v) : p.rej(new Error(v?.error ?? 'bridge error'));
 };
 
+/**
+ * @notice Call the engine through whichever bridge this platform injected.
+ * @param method RPC method.
+ * @param params Method parameters.
+ * @return The method result. Rejects when no bridge is present.
+ */
 function call(method: string, params: any = {}): Promise<any> {
   // Desktop: Electron preload isolated world.
   if (w.ddocBridge?.call) return w.ddocBridge.call(method, params);
@@ -73,10 +85,18 @@ let config: PageConfig | null = null;
 let queue: { el: Element; text: string; kind: string }[] = [];
 let flushTimer: any = null;
 
+/**
+ * @notice Visible text of an element, collapsed to single spaces.
+ * @param el Element to read.
+ * @return Trimmed text.
+ */
 function textOf(el: Element): string {
   return ((el as HTMLElement).innerText ?? el.textContent ?? '').replace(/\s+/g, ' ').trim();
 }
 
+/**
+ * @notice Insert the agent stylesheet once per document.
+ */
 function injectStyles() {
   if (document.getElementById('ddoc-style')) return;
   const s = document.createElement('style');
@@ -87,6 +107,11 @@ function injectStyles() {
 
 /* ------------------------- block discovery ------------------------- */
 
+/**
+ * @notice Find content blocks under a root, using the site adapter and then the generic selectors.
+ * @param root Document or a newly added subtree.
+ * @return Elements and their kinds. Nested blocks are skipped so a post is not classified twice.
+ */
 function candidates(root: ParentNode): { el: Element; kind: string }[] {
   const adapter = adapterFor(host);
   const out: { el: Element; kind: string }[] = [];
@@ -112,6 +137,10 @@ function candidates(root: ParentNode): { el: Element; kind: string }[] {
   return out;
 }
 
+/**
+ * @notice Queue new or changed blocks for classification.
+ * @param root Subtree to scan. Defaults to the document.
+ */
 function scan(root: ParentNode = document) {
   if (!config) return;
   for (const { el, kind } of candidates(root)) {
@@ -125,6 +154,9 @@ function scan(root: ParentNode = document) {
   if (queue.length && !flushTimer) flushTimer = setTimeout(flush, 120);
 }
 
+/**
+ * @notice Send up to 40 queued blocks to the engine and apply the decisions.
+ */
 async function flush() {
   flushTimer = null;
   const batch = queue.splice(0, 40);
@@ -141,6 +173,13 @@ async function flush() {
 
 /* --------------------------- applying ------------------------------ */
 
+/**
+ * @notice Create an agent UI element. The `ddoc-ui` class keeps it out of later scans.
+ * @param tag HTML tag name.
+ * @param cls Class string.
+ * @param text Optional text content.
+ * @return The element.
+ */
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, text?: string): HTMLElementTagNameMap[K] {
   const e = document.createElement(tag);
   e.className = cls;
@@ -148,6 +187,11 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, text?: s
   return e;
 }
 
+/**
+ * @notice The explanation panel for a decision.
+ * @param d Decision to explain.
+ * @return The panel element.
+ */
 function why(d: Decision) {
   const box = el('div', 'ddoc-ui ddoc-why');
   box.appendChild(el('div', 'ddoc-why-title', `Why: ${d.categoryLabel ?? 'Filtered'}`));
@@ -156,6 +200,13 @@ function why(d: Decision) {
   return box;
 }
 
+/**
+ * @notice The bar with Why, Show, and Not harmful.
+ * @param target Block the bar belongs to.
+ * @param d Decision being shown.
+ * @param onReveal Called when the user asks to see the block.
+ * @return The bar. Child profiles do not get Show or Not harmful except on a label.
+ */
 function controls(target: Element, d: Decision, onReveal: () => void) {
   const bar = el('div', 'ddoc-ui ddoc-bar ddoc-' + d.action);
   bar.dataset.ddocFor = d.id;
@@ -179,6 +230,11 @@ function controls(target: Element, d: Decision, onReveal: () => void) {
   return bar;
 }
 
+/**
+ * @notice Links to the support services attached to a decision.
+ * @param d Decision whose resources to render.
+ * @return The link row.
+ */
 function resources(d: Decision) {
   const r = el('div', 'ddoc-resources');
   for (const x of d.resources ?? []) {
@@ -189,6 +245,11 @@ function resources(d: Decision) {
   return r;
 }
 
+/**
+ * @notice Apply one decision to its element: label, blur, hide, support screen, or block the page.
+ * @param target Element that was classified.
+ * @param d Decision for that element.
+ */
 function apply(target: Element, d: Decision) {
   target.classList.remove('ddoc-pending');
   if (d.action === 'allow') return;
@@ -230,12 +291,21 @@ function apply(target: Element, d: Decision) {
   }
 }
 
-/** If text around an image/video is harmful, blur the media in the same post too. */
+/**
+ * @notice Blur images and video in the same post when the surrounding text is filtered.
+ * @param t Filtered element.
+ */
 function blurNearbyMedia(t: HTMLElement) {
   const post = t.closest('article, [role=article], li, .post, .comment') ?? t.parentElement;
   post?.querySelectorAll('img, video').forEach((m) => (m as HTMLElement).classList.add('ddoc-blurred'));
 }
 
+/**
+ * @notice Cover the page. Used for CSEA decisions and parent block-list hits.
+ * @param title Heading.
+ * @param reason Why the page is blocked.
+ * @param res Optional support links.
+ */
 function blockPage(title: string, reason: string, res?: Decision['resources']) {
   if (document.getElementById('ddoc-block')) return;
   const o = el('div', 'ddoc-ui ddoc-block');
@@ -253,6 +323,9 @@ function blockPage(title: string, reason: string, res?: Decision['resources']) {
 
 /* ------------------------- design controls ------------------------- */
 
+/**
+ * @notice Apply this profile's feed controls on the current site.
+ */
 function applyDesign() {
   if (!config) return;
   const d = config.design;
@@ -284,6 +357,11 @@ function applyDesign() {
   if (d.stopInfiniteScroll && a?.feedItem) watchScrollLimit(a.feedItem, d.scrollLimit);
 }
 
+/**
+ * @notice Hide feed items past the profile's limit and offer adults a way to extend it.
+ * @param itemSel Selector for one feed item.
+ * @param limit How many items to leave visible.
+ */
 function watchScrollLimit(itemSel: string, limit: number) {
   let extended = 0;
   const check = () => {
@@ -310,6 +388,9 @@ function watchScrollLimit(itemSel: string, limit: number) {
 
 let pill: HTMLElement | null = null;
 
+/**
+ * @notice Show the Teach DDoC pill under the current text selection.
+ */
 function onSelection() {
   const sel = document.getSelection();
   const text = sel?.toString().trim() ?? '';
@@ -324,6 +405,10 @@ function onSelection() {
   document.documentElement.appendChild(pill);
 }
 
+/**
+ * @notice Open the teach dialog for a piece of text.
+ * @param text Selected text, or text sent by the desktop Teach menu.
+ */
 export function openTeach(text: string) {
   document.getElementById('ddoc-teach')?.remove();
   const cats = config?.allCategories ?? [];
@@ -356,12 +441,19 @@ export function openTeach(text: string) {
   document.documentElement.appendChild(m);
 }
 
+/**
+ * @notice Show a short message and remove it after a few seconds.
+ * @param msg Message text.
+ */
 function toast(msg: string) {
   const t = el('div', 'ddoc-ui ddoc-toast', msg);
   document.documentElement.appendChild(t);
   setTimeout(() => t.remove(), 3500);
 }
 
+/**
+ * @notice Drop applied decisions and classify the page again after the user teaches an example.
+ */
 function rescan() {
   // re-evaluate everything, since learned examples changed
   document.querySelectorAll('.ddoc-bar').forEach((b) => b.remove());
@@ -370,10 +462,16 @@ function rescan() {
   (processedReset as any)();
   scan();
 }
+/**
+ * @notice Forget which elements have already been classified so a rescan can see them.
+ */
 const processedReset = () => { document.querySelectorAll('*').forEach((e) => processed.delete(e)); };
 
 /* ------------------------- link warnings --------------------------- */
 
+/**
+ * @notice Intercept clicks on lookalike domains and ask before opening them.
+ */
 function guardLinks() {
   document.addEventListener('click', (e) => {
     const a = (e.target as Element).closest?.('a[href]') as HTMLAnchorElement | null;
@@ -394,6 +492,9 @@ function guardLinks() {
 
 /* ------------------------------ boot ------------------------------- */
 
+/**
+ * @notice Start the agent once per frame: load config, style, scan, and watch for new nodes.
+ */
 async function boot() {
   if (w.__ddocBooted) return;
   w.__ddocBooted = true;

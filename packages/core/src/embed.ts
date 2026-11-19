@@ -1,15 +1,12 @@
 /**
- * On-device text embedding used for personal learning.
- *
- * A hashed bag of word unigrams, word bigrams and character trigrams, L2-normalised.
- * It is small (no model download), deterministic and fast enough to run on every block of
- * every page on a phone. It captures lexical and near-lexical similarity ("you're so ugly"
- * vs "ur sooo ugly lol"); semantic paraphrase beyond that is delegated to JEV, which receives
- * the user's description and examples for each custom category.
- *
- * The interface (`Embedder`) lets a platform swap in a neural on-device model later.
+ * @title On-device text embedding
+ * @notice Turns text into a vector so a user's examples can match similar wording on any site.
+ * @dev Hashed word unigrams, word bigrams, and character trigrams, L2-normalised. No model download. Semantic paraphrase beyond near-lexical matches is left to JEV. `Embedder` is the swap point for a neural model later.
  */
 
+/**
+ * @notice Something that embeds text into a fixed-length vector.
+ */
 export interface Embedder {
   dim: number;
   embed(text: string): Float32Array;
@@ -17,6 +14,12 @@ export interface Embedder {
 
 const STOP = new Set(['the', 'a', 'an', 'and', 'or', 'of', 'to', 'in', 'is', 'it', 'on', 'for', 'at', 'this', 'that', 'with', 'be', 'are', 'was']);
 
+/**
+ * @notice Fold text into a comparable form before hashing.
+ * @dev Lowercases, strips accents, expands common letter substitutions, and collapses repeated characters.
+ * @param text Raw page or example text.
+ * @return Normalised text, or an empty string.
+ */
 export function normalise(text: string): string {
   return text
     .toLowerCase()
@@ -30,6 +33,11 @@ export function normalise(text: string): string {
     .trim();
 }
 
+/**
+ * @notice Hash a feature string into a 32-bit value.
+ * @param str Feature such as a word, bigram, or character trigram.
+ * @return Unsigned FNV-1a hash.
+ */
 function fnv1a(str: string): number {
   let h = 0x811c9dc5;
   for (let i = 0; i < str.length; i++) {
@@ -39,9 +47,22 @@ function fnv1a(str: string): number {
   return h >>> 0;
 }
 
+/**
+ * @title Hashed n-gram embedder
+ * @notice Default on-device embedder. Signed hashing spreads features across `dim` buckets.
+ */
 export class HashedNgramEmbedder implements Embedder {
+  /**
+   * @notice Create an embedder.
+   * @param dim Vector length. Defaults to 1024.
+   */
   constructor(public dim = 1024) {}
 
+  /**
+   * @notice Embed one string.
+   * @param text Text to embed. It is normalised first.
+   * @return An L2-normalised vector of length `dim`.
+   */
   embed(text: string): Float32Array {
     const v = new Float32Array(this.dim);
     const norm = normalise(text);
@@ -65,6 +86,13 @@ export class HashedNgramEmbedder implements Embedder {
   }
 }
 
+/**
+ * @notice Cosine similarity of two equal-length vectors.
+ * @dev Vectors from `HashedNgramEmbedder` are already L2-normalised, so this is their dot product.
+ * @param a First vector.
+ * @param b Second vector.
+ * @return Similarity in about -1 to 1.
+ */
 export function cosine(a: Float32Array, b: Float32Array): number {
   let s = 0;
   for (let i = 0; i < a.length; i++) s += a[i] * b[i];

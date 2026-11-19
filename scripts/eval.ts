@@ -1,9 +1,7 @@
 /**
- * Accuracy and over-blocking evaluation.
- *   TYPESAFE_API_KEY=... node --experimental-strip-types scripts/eval.ts   -> evaluates against the real JEV
- *   node --experimental-strip-types scripts/eval.ts                        -> pipeline check against the MOCK JEV (not an accuracy claim)
- *   node --experimental-strip-types scripts/eval.ts --local                -> on-device stages only
- * CSEA material is deliberately excluded from the eval set.
+ * @title Evaluation harness
+ * @notice Measures harmful recall and over-blocking of protected expression.
+ * @dev `--local` uses on-device stages only. With `TYPESAFE_API_KEY`, calls the real JEV. Otherwise it uses the mock, which is a pipeline check and not an accuracy claim. CSEA material is excluded from the set.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -18,6 +16,9 @@ const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..')
 loadEnv([path.join(root, '.env')]);
 const out = path.join(root, 'dist/eval-core.mjs');
 await build({ entryPoints: [path.join(root, 'packages/core/src/index.ts')], outfile: out, bundle: true, format: 'esm', platform: 'node', logLevel: 'warning' });
+/**
+ * @notice The slice of the engine bundle this harness calls.
+ */
 interface EvalCore {
   JevClient: new (cfg: JevConfig) => unknown;
   defaultState(): EngineState;
@@ -36,6 +37,9 @@ const classifier = local ? undefined : new core.JevClient(real
   ? { apiKey: process.env.TYPESAFE_API_KEY, baseURL: process.env.TYPESAFE_BASE_URL }
   : { apiKey: 'mock', baseURL: 'http://127.0.0.1:4788' });
 
+/**
+ * @notice One labelled item in the evaluation set.
+ */
 interface EvalRow { text: string; expect: string; profile?: string; kind?: string }
 const rows = fs.readFileSync(path.join(root, 'eval/dataset.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l) as EvalRow);
 const res: { tp: number; fn: number; fp: number; tn: number; protectedHidden: number; protectedTotal: number; misses: { text: string; expect: string; got: string }[]; falsePos: { text: string; got: string }[] } = { tp: 0, fn: 0, fp: 0, tn: 0, protectedHidden: 0, protectedTotal: 0, misses: [], falsePos: [] };

@@ -1,3 +1,13 @@
+/**
+ * @title Toolbar
+ * @notice Renders tabs and sends toolbar commands through `ddocChrome`.
+ */
+
+/**
+ * @notice Find a required toolbar element.
+ * @param id Element id.
+ * @return The element. Throws when it is missing.
+ */
 const $ = <T extends HTMLElement>(id: string) => {
   const node = document.getElementById(id);
   if (!node) throw new Error(`#${id} missing`);
@@ -13,6 +23,10 @@ if (location.search.includes('private=1')) {
   $<HTMLElement>('private-badge').hidden = false;
 }
 
+/**
+ * @notice Draw the tab strip and toolbar from a snapshot.
+ * @param s Tabs, active index, profile, and bookmark flag.
+ */
 function render(s: ChromeState) {
   state = s;
   const tabs = $<HTMLElement>('tabs');

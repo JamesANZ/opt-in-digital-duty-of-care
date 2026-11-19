@@ -1,15 +1,22 @@
 /**
- * High-precision local rules. These run on-device even in Local-only mode.
- * They aim for precision over recall: JEV and learned examples provide recall.
+ * @title On-device rules
+ * @notice High-precision checks that run even when JEV is off.
+ * @dev These prefer precision over recall. JEV and taught examples supply the recall.
  */
 import { normalise } from './embed';
 
+/**
+ * @notice One rule that matched a piece of text.
+ */
 export interface RuleHit {
   categoryId: string;
   confidence: number;
   rule: string;
 }
 
+/**
+ * @notice A local rule: an id, the category it supports, its confidence, and its test.
+ */
 interface Rule {
   id: string;
   categoryId: string;
@@ -17,8 +24,17 @@ interface Rule {
   test: (norm: string, raw: string) => boolean;
 }
 
+/**
+ * @notice Build a rule test that matches when any pattern matches the normalised or raw text.
+ * @param res Patterns to try.
+ * @return A test function for a `Rule`.
+ */
 const any = (...res: RegExp[]) => (n: string, raw: string) => res.some((r) => r.test(n) || r.test(raw));
 
+/**
+ * @notice The shipped high-precision rules.
+ * @dev A match is a filtering candidate only when that category is enabled on the active profile.
+ */
 const RULES: Rule[] = [
   // Self-harm / suicide promotion and method-seeking. Supportive interstitial, never a silent hide.
   { id: 'selfharm.encourage', categoryId: 'self_harm', confidence: 0.9,
@@ -50,6 +66,11 @@ const RULES: Rule[] = [
     test: any(/\b(blackout|choking|pass ?out|skull ?breaker) challenge\b/) },
 ];
 
+/**
+ * @notice Run every local rule against a piece of text.
+ * @param text Text to test.
+ * @return Matches, highest confidence first.
+ */
 export function runRules(text: string): RuleHit[] {
   const norm = normalise(text);
   const lower = text.toLowerCase().replace(/[\u2018\u2019]/g, "'").replace(/\s+/g, ' ');
@@ -59,8 +80,8 @@ export function runRules(text: string): RuleHit[] {
 }
 
 /**
- * Cheap risk screen used to decide whether a block is worth sending to JEV in "risky-only" mode.
- * Deliberately broad: false positives here only cost a JEV call, not a filtering decision.
+ * @notice Stems used by the risk screen.
+ * @dev Deliberately broad. A hit only makes the block eligible for a JEV call. It is not a filtering decision.
  */
 const RISK_STEMS = [
   'kill', 'die', 'dead', 'death', 'suicid', 'cut', 'hurt', 'harm', 'hate', 'ugly', 'fat', 'stupid', 'idiot', 'loser',
@@ -71,37 +92,55 @@ const RISK_STEMS = [
   'deepfake', 'nudify', 'undress', 'women are', 'females', 'alpha male', 'kys', 'worthless', 'nobody likes', 'threat',
 ];
 
+/**
+ * @notice Decide whether balanced mode should consider sending this text to JEV.
+ * @param text Text to screen.
+ * @return True when a risk stem is present.
+ */
 export function riskScreen(text: string): boolean {
   const n = normalise(text);
   return RISK_STEMS.some((s) => n.includes(s));
 }
 
 /**
- * Cheap hint that a block might be an ad. A hit only justifies asking JEV;
- * it is not itself a block decision.
+ * @notice Phrases that suggest a block might be an advertisement.
+ * @dev A hit only justifies asking JEV. It is not itself a block decision.
  */
 const AD_HINT = /\b(sponsored|advertisements?|advert|paid partnership|paid post|shop now|buy now|order now|use code|promo codes?|limited[- ]time offer|affiliate link)\b|%\s*off\b/i;
 
+/**
+ * @notice Decide whether balanced mode should ask JEV if this block is an ad.
+ * @param text Text to screen.
+ * @return True when an advertising phrase is present.
+ */
 export function adScreen(text: string): boolean {
   return AD_HINT.test(text);
 }
 
-/* ------------------------------------------------------------------ */
-/* URL checks: lookalike domains for common Australian scam targets.   */
-/* ------------------------------------------------------------------ */
-
+/**
+ * @notice Brand names and the hostnames that are allowed to use them.
+ * @dev Used to flag lookalike domains for common Australian scam targets.
+ */
 const PROTECTED_BRANDS: Record<string, string[]> = {
   mygov: ['my.gov.au'], ato: ['ato.gov.au'], auspost: ['auspost.com.au'], commbank: ['commbank.com.au'],
   westpac: ['westpac.com.au'], nab: ['nab.com.au'], anz: ['anz.com.au'], paypal: ['paypal.com'],
   linkt: ['linkt.com.au'], medicare: ['servicesaustralia.gov.au'], centrelink: ['servicesaustralia.gov.au'],
 };
 
+/**
+ * @notice Result of checking a link for a lookalike domain.
+ */
 export interface UrlVerdict {
   suspicious: boolean;
   reason?: string;
   brand?: string;
 }
 
+/**
+ * @notice Check a link for a punycode host or a brand name on an unofficial domain.
+ * @param url Absolute URL to check.
+ * @return A verdict. Unparseable URLs are not suspicious.
+ */
 export function checkUrl(url: string): UrlVerdict {
   let host: string;
   try { host = new URL(url).hostname.toLowerCase(); } catch { return { suspicious: false }; }
@@ -118,8 +157,8 @@ export function checkUrl(url: string): UrlVerdict {
 }
 
 /**
- * On-device detector for protected-expression framing (news, education, research, support).
- * Used to soften rule hits in Local-only mode, where JEV's context question is unavailable.
+ * @notice Phrases that mark news, education, or support framing.
+ * @dev Used to soften a rule hit when JEV's context question is unavailable.
  */
 const CONTEXT_CUES: [string, RegExp][] = [
   ['news_reporting', /\b(police (said|say)|reporters?|according to|court (heard|date)|was charged|journalists?)\b/],
@@ -127,6 +166,11 @@ const CONTEXT_CUES: [string, RegExp][] = [
   ['support_recovery', /\b(reach out|helpline|you are not alone|in recovery|recovery from|lifeline|kids helpline)\b/],
 ];
 
+/**
+ * @notice Guess a protected context from on-device cues.
+ * @param text Text to read.
+ * @return A context id, or null when no cue matches.
+ */
 export function localContext(text: string): string | null {
   const lower = text.toLowerCase();
   for (const [ctx, re] of CONTEXT_CUES) if (re.test(lower)) return ctx;

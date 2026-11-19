@@ -1,14 +1,18 @@
 /**
- * JEV (TypeSafe AI System One) client.
- *
- * Dependency-free so the same code runs in Node/Electron main, Android and iOS JS contexts.
- * Wire format matches @typesafe-ai/sdk 0.7: POST {baseURL}/v1/systemone with
- * { model, state, questions: { name: { type, instructions, criteria } } }.
+ * @title JEV client
+ * @notice Talks to TypeSafe System One. The same code runs in Node, Electron, Android, and iOS.
+ * @dev POST {baseURL}/v1/systemone with { model, state, questions }. Ads are a separate yes/no question, not one of the harm choices.
  */
 import { CONTEXTS, HarmCategory, SEVERITY_LEVELS } from './taxonomy';
 
+/**
+ * @notice The small slice of `fetch` this client uses, so native shells can substitute their own HTTP.
+ */
 export type FetchLike = (url: string, init: { method: string; headers: Record<string, string>; body: string; signal?: AbortSignal }) => Promise<{ ok: boolean; status: number; json(): Promise<any>; text(): Promise<string> }>;
 
+/**
+ * @notice How to reach JEV.
+ */
 export interface JevConfig {
   apiKey?: string;
   baseURL?: string; // default https://api.typesafe.ai
@@ -17,6 +21,9 @@ export interface JevConfig {
   timeoutMs?: number;
 }
 
+/**
+ * @notice A user category turned into a JEV question.
+ */
 export interface CustomCategoryQuestion {
   id: string;
   label: string;
@@ -25,6 +32,9 @@ export interface CustomCategoryQuestion {
   examples?: string[];
 }
 
+/**
+ * @notice Parsed JEV answers for one block.
+ */
 export interface JevVerdict {
   harm: string; // category id or 'none'
   harmProbabilities: Record<string, number>;
@@ -37,12 +47,29 @@ export interface JevVerdict {
   model?: string;
 }
 
+/**
+ * @notice The yes/no question asked when the ads filter is on.
+ * @dev Kept out of the harm choice so ads do not compete with real harms or fail the severity gate.
+ */
 const ADS_QUESTION = 'Is `content.text` itself an advertisement, sponsored post, or paid promotion? Yes for commercial pitches, product placements, affiliate plugs, and sponsored labels. No for editorial, personal, news, or discussion text that merely mentions a product, brand, or advertisement.';
 
+/**
+ * @notice Anything the engine can ask to classify text. `JevClient` is the production implementation.
+ */
 export interface Classifier {
   classify(text: string, kind: string, categories: HarmCategory[], custom: CustomCategoryQuestion[]): Promise<JevVerdict>;
 }
 
+/**
+ * @notice Build the System One request body for one block.
+ * @param text Text to judge. Truncated to 4000 characters.
+ * @param kind Block kind, such as post, comment, or ad.
+ * @param categories Categories to ask about. The ads category is asked separately.
+ * @param custom User categories.
+ * @param model Model name, usually `jev-latest`.
+ * @param opts Set `ads` to include the advertisement question even when `categories` has no ads entry.
+ * @return The JSON body posted to `/v1/systemone`.
+ */
 export function buildRequest(text: string, kind: string, categories: HarmCategory[], custom: CustomCategoryQuestion[], model: string, opts?: { ads?: boolean }) {
   const harmCats = categories.filter((c) => c.id !== 'ads');
   const askAds = !!opts?.ads || categories.some((c) => c.id === 'ads');
@@ -66,6 +93,12 @@ export function buildRequest(text: string, kind: string, categories: HarmCategor
   return { model, state: { content: { kind, text: text.slice(0, 4000) } }, questions };
 }
 
+/**
+ * @notice Turn a System One response into a verdict.
+ * @param body Response JSON.
+ * @param custom User categories whose answers should be copied out.
+ * @return Probabilities and choices. Missing answers become none, benign, or zero.
+ */
 export function parseResponse(body: any, custom: CustomCategoryQuestion[]): JevVerdict {
   const a = body?.answers ?? {};
   const customOut: Record<string, number> = {};
@@ -82,22 +115,42 @@ export function parseResponse(body: any, custom: CustomCategoryQuestion[]): JevV
   };
 }
 
+/**
+ * @title JEV client
+ * @notice Sends one block to System One and returns a verdict.
+ */
 export class JevClient implements Classifier {
   private baseURL: string;
   private model: string;
   private fetchFn: FetchLike;
   sent = 0;
 
+  /**
+   * @notice Create a client.
+   * @param cfg API key, gateway, model, and optional fetch implementation.
+   */
   constructor(private cfg: JevConfig) {
     this.baseURL = (cfg.baseURL ?? 'https://api.typesafe.ai').replace(/\/+$/, '');
     this.model = cfg.model ?? 'jev-latest';
     this.fetchFn = cfg.fetch ?? ((globalThis as any).fetch as FetchLike);
   }
 
+  /**
+   * @notice Whether an API key is set.
+   * @return True when calls can be attempted.
+   */
   get configured() {
     return !!this.cfg.apiKey;
   }
 
+  /**
+   * @notice Classify one block.
+   * @param text Text to judge.
+   * @param kind Block kind.
+   * @param categories Enabled categories, including ads when that filter is on.
+   * @param custom Enabled user categories.
+   * @return The parsed verdict. Throws when the key is missing, the request times out, or HTTP fails.
+   */
   async classify(text: string, kind: string, categories: HarmCategory[], custom: CustomCategoryQuestion[]): Promise<JevVerdict> {
     if (!this.cfg.apiKey) throw new Error('JEV API key not configured');
     const body = buildRequest(text, kind, categories, custom, this.model, { ads: categories.some((c) => c.id === 'ads') });

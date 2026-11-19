@@ -1,9 +1,26 @@
+/**
+ * @title New tab page
+ * @notice Search box, bookmarks, and the active profile's filter count.
+ */
+
 const admin = window.ddocAdmin;
 if (!admin) throw new Error('Dashboard bridge missing');
 
+/**
+ * @notice A bookmark on the new-tab page.
+ */
 interface Bookmark { title?: string; url: string }
+/**
+ * @notice Bookmarks returned to the new-tab page.
+ */
 interface BrowserData { bookmarks: Bookmark[] }
+/**
+ * @notice A profile name shown under the logo.
+ */
 interface DashProfile { id: string; name: string }
+/**
+ * @notice The slice of engine state the new-tab page reads.
+ */
 interface DashState {
   profiles: DashProfile[];
   settings: { activeProfileId: string };

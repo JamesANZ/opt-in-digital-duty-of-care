@@ -1,11 +1,22 @@
+/**
+ * @title Safety engine
+ * @notice Decides what to do with one block: taught examples, then local rules, then JEV.
+ * @dev Protected expression is labelled rather than hidden. Ads are a separate question and are not softened by a news context.
+ */
 import { Example, Learner, Polarity, similarityThreshold } from './learner';
 import { Classifier, CustomCategoryQuestion, JevVerdict } from './jev';
 import { Action, applyBuiltinDefaults, CategorySetting, defaultSettings, makeProfile, Profile, Settings } from './profiles';
 import { adScreen, localContext, riskScreen, runRules } from './rules';
 import { BUILTIN_CATEGORIES, HarmCategory, HelpResource, PROTECTED_CONTEXTS } from './taxonomy';
 
+/**
+ * @notice Which stage produced a decision.
+ */
 export type Stage = 'learned' | 'rule' | 'jev' | 'host' | 'none' | 'cache';
 
+/**
+ * @notice One piece of page content to classify.
+ */
 export interface Block {
   text: string;
   /** post | comment | search_result | caption | alt | message | title | other */
@@ -13,6 +24,9 @@ export interface Block {
   host?: string;
 }
 
+/**
+ * @notice What the engine decided, why, and which stage decided it.
+ */
 export interface Decision {
   id: string;
   ts: number;
@@ -31,6 +45,9 @@ export interface Decision {
   overridden?: 'revealed' | 'not_harmful' | 'appealed';
 }
 
+/**
+ * @notice Everything persisted for this device: settings, profiles, examples, and the decision log.
+ */
 export interface EngineState {
   version: 1;
   settings: Settings;
@@ -41,6 +58,10 @@ export interface EngineState {
   counters: { jevSent: number; localDecided: number; filtered: number };
 }
 
+/**
+ * @notice State for a first launch: one adult profile named Me.
+ * @return A version-1 engine state.
+ */
 export function defaultState(): EngineState {
   return {
     version: 1,
@@ -54,8 +75,17 @@ export function defaultState(): EngineState {
 }
 
 const MAX_LOG = 2000;
+/**
+ * @notice Mint an id for a decision or category.
+ * @return A short id from random bits and the current time.
+ */
 const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 
+/**
+ * @notice Stable cache key for a block of text.
+ * @param s Normalised text.
+ * @return A short hash plus the length, so equal text shares a cache entry.
+ */
 function hash(s: string): string {
   let h = 5381;
   for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
@@ -65,17 +95,31 @@ function hash(s: string): string {
 const MIN_SEVERITY = { adult: 2.0, teen: 1.5, child: 1.0 } as const;
 const ACTION_RANK: Record<Action, number> = { allow: 0, label: 1, blur: 2, interstitial: 3, hide: 4, block_page: 5 };
 
-/** JEV probability threshold from user sensitivity. */
+/**
+ * @notice Probability a JEV answer must reach before it filters.
+ * @dev 0 maps to 0.85 and 1 maps to 0.35.
+ * @param sensitivity Category sensitivity from 0 to 1.
+ * @return Probability threshold.
+ */
 export function probabilityThreshold(sensitivity: number) {
   return 0.85 - 0.5 * Math.min(1, Math.max(0, sensitivity));
 }
 
+/**
+ * @title Engine
+ * @notice Holds profile state and classifies blocks for the active profile.
+ */
 export class Engine {
   state: EngineState;
   learner = new Learner();
   private cache = new Map<string, Decision>();
   onChange?: (s: EngineState) => void;
 
+  /**
+   * @notice Create an engine and load its taught examples.
+   * @param state Saved state, or a fresh state.
+   * @param classifier JEV client. Omit it for on-device decisions only.
+   */
   constructor(state: EngineState = defaultState(), public classifier?: Classifier) {
     this.state = state;
     applyBuiltinDefaults(this.state.profiles);
@@ -84,22 +128,43 @@ export class Engine {
 
   /* ---------------- accessors ---------------- */
 
+  /**
+   * @notice The profile whose settings apply to new decisions.
+   * @return The active profile, or the first profile if the id is missing.
+   */
   get profile(): Profile {
     return this.state.profiles.find((p) => p.id === this.state.settings.activeProfileId) ?? this.state.profiles[0];
   }
 
+  /**
+   * @notice Built-in categories followed by this device's custom categories.
+   * @return The combined list.
+   */
   get categories(): HarmCategory[] {
     return [...BUILTIN_CATEGORIES, ...this.state.customCategories];
   }
 
+  /**
+   * @notice Look up a category.
+   * @param id Category id.
+   * @return The category, or undefined.
+   */
   category(id: string) {
     return this.categories.find((c) => c.id === id);
   }
 
+  /**
+   * @notice The active profile's setting for a category.
+   * @param id Category id.
+   * @return The saved setting, or a disabled blur default.
+   */
   setting(id: string): CategorySetting {
     return this.profile.categories[id] ?? { enabled: false, sensitivity: 0.5, action: 'blur' };
   }
 
+  /**
+   * @notice Copy learner examples back into state and notify the shell to persist.
+   */
   private changed() {
     this.state.examples = this.learner.examples;
     this.onChange?.(this.state);
@@ -107,6 +172,11 @@ export class Engine {
 
   /* ---------------- host policy ---------------- */
 
+  /**
+   * @notice Whether this profile blocks a host outright.
+   * @param host Hostname of the page being opened.
+   * @return Blocked when the host is on the block list and not on the allow list.
+   */
   hostPolicy(host: string): { blocked: boolean; reason?: string } {
     const p = this.profile;
     const m = (list: string[]) => list.some((h) => host === h || host.endsWith('.' + h));
@@ -117,6 +187,11 @@ export class Engine {
 
   /* ---------------- classification ---------------- */
 
+  /**
+   * @notice Decide what to do with one block and record anything that is filtered.
+   * @param block Text, kind, and optional host.
+   * @return The decision. Text shorter than 4 characters is allowed.
+   */
   async classify(block: Block): Promise<Decision> {
     const text = block.text.replace(/\s+/g, ' ').trim();
     if (text.length < 4) return this.allow(block, 'Too short to assess');
@@ -138,10 +213,26 @@ export class Engine {
     return d;
   }
 
+  /**
+   * @notice An allow decision that is not written to the log.
+   * @param block Block being classified.
+   * @param reason Explanation shown if a caller asks.
+   * @param stage Stage that allowed it.
+   * @return The allow decision.
+   */
   private allow(block: Block, reason: string, stage: Stage = 'none'): Decision {
     return { id: uid(), ts: Date.now(), action: 'allow', confidence: 0, stage, reason, host: block.host };
   }
 
+  /**
+   * @notice A filtering decision using the active profile's action for that category.
+   * @param categoryId Category that matched.
+   * @param confidence Match strength from 0 to 1.
+   * @param stage Stage that matched.
+   * @param reason Explanation for the user.
+   * @param extra Context, severity, or other fields to merge in.
+   * @return The decision. CSEA categories are marked no-reveal.
+   */
   private make(categoryId: string, confidence: number, stage: Stage, reason: string, extra: Partial<Decision> = {}): Decision {
     const cat = this.category(categoryId);
     const set = this.setting(categoryId);
@@ -151,6 +242,12 @@ export class Engine {
     };
   }
 
+  /**
+   * @notice Run taught examples, then rules, then JEV.
+   * @param text Normalised block text.
+   * @param block Original block, used for kind and host.
+   * @return The winning decision.
+   */
   private async decide(text: string, block: Block): Promise<Decision> {
     const enabled = (id: string) => this.setting(id).enabled;
 
@@ -222,6 +319,13 @@ export class Engine {
     return this.fromVerdict(v, block);
   }
 
+  /**
+   * @notice Turn a JEV verdict into one decision for the active profile.
+   * @dev Ads are not downgraded to a label in a protected context. Other categories are, unless they are hard and severe.
+   * @param v Parsed verdict.
+   * @param block Block the verdict is about.
+   * @return The strongest enabled decision, or an allow when nothing clears its threshold.
+   */
   fromVerdict(v: JevVerdict, block: Block): Decision {
     const kind = this.profile.kind;
     const ctxP = v.contextProbabilities[v.context] ?? 0.6;
@@ -267,6 +371,16 @@ export class Engine {
 
   /* ---------------- learning & feedback ---------------- */
 
+  /**
+   * @notice Teach the engine from a selection or the dashboard.
+   * @param text Example text, truncated to 2000 characters.
+   * @param categoryId Category the example belongs to.
+   * @param polarity Harmful or fine.
+   * @param note Optional reason written by the user.
+   * @param host Host where it was tagged, kept for the user's own review.
+   * @param source How the example was created.
+   * @return The stored example.
+   */
   tag(text: string, categoryId: string, polarity: Polarity, note?: string, host?: string, source: Example['source'] = 'tag'): Example {
     const ex = this.learner.add({ text: text.slice(0, 2000), categoryId, polarity, note, host, source });
     this.cache.clear();
@@ -274,7 +388,12 @@ export class Engine {
     return ex;
   }
 
-  /** One-click override. "not_harmful" teaches a negative example; "appeal" also records for review. */
+  /**
+   * @notice Record that the user revealed, rejected, or appealed a decision.
+   * @dev `not_harmful` and `appealed` teach a fine example so the same wording is not filtered again.
+   * @param decisionId Decision id from the log.
+   * @param kind What the user did.
+   */
   override(decisionId: string, kind: 'revealed' | 'not_harmful' | 'appealed') {
     const d = this.state.decisions.find((x) => x.id === decisionId);
     if (!d) return;
@@ -285,12 +404,22 @@ export class Engine {
     this.changed();
   }
 
+  /**
+   * @notice Delete one taught example.
+   * @param id Example id.
+   */
   deleteExample(id: string) {
     this.learner.remove(id);
     this.cache.clear();
     this.changed();
   }
 
+  /**
+   * @notice Create a user category and enable it on every profile.
+   * @param label Name shown in the dashboard.
+   * @param description Meaning sent to JEV as the question.
+   * @return The new category.
+   */
   addCustomCategory(label: string, description: string): HarmCategory {
     const id = 'custom_' + label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 30) + '_' + uid().slice(0, 4);
     const cat: HarmCategory = { id, label, description, group: 'other', billRef: 'Your own category', custom: true };
@@ -301,6 +430,10 @@ export class Engine {
     return cat;
   }
 
+  /**
+   * @notice Delete a user category, its settings, and its examples.
+   * @param id Category id.
+   */
   removeCustomCategory(id: string) {
     this.state.customCategories = this.state.customCategories.filter((c) => c.id !== id);
     for (const p of this.state.profiles) delete p.categories[id];
@@ -309,6 +442,12 @@ export class Engine {
     this.changed();
   }
 
+  /**
+   * @notice Change one category's setting on one profile.
+   * @param profileId Profile to update.
+   * @param categoryId Category to update.
+   * @param patch Fields to replace. Missing fields stay as they are.
+   */
   updateSetting(profileId: string, categoryId: string, patch: Partial<CategorySetting>) {
     const p = this.state.profiles.find((x) => x.id === profileId);
     if (!p) return;
@@ -317,12 +456,19 @@ export class Engine {
     this.changed();
   }
 
+  /**
+   * @notice Empty the decision log. Taught examples are kept.
+   */
   clearDecisions() {
     this.state.decisions = [];
     this.changed();
   }
 
-  /** Local transparency report (never uploaded). */
+  /**
+   * @notice Summarise the local decision log for the dashboard.
+   * @dev The report is never uploaded.
+   * @return Counts by category and stage, override count, counters, and learning progress.
+   */
   report() {
     const byCat: Record<string, number> = {};
     const byStage: Record<string, number> = {};

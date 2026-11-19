@@ -1,6 +1,11 @@
 /**
- * Site adapters. Selectors drift as sites change their markup, so each adapter is small and
- * the generic fallback still catches text on any site. Adapters can be updated as data.
+ * @title Site adapters
+ * @notice Selectors for known sites, plus a generic fallback that still finds text anywhere.
+ * @dev Selectors drift as sites change markup. Each adapter is data and can be updated on its own.
+ */
+
+/**
+ * @notice How to find blocks and feed controls on one family of sites.
  */
 export interface SiteAdapter {
   hosts: string[];
@@ -12,6 +17,10 @@ export interface SiteAdapter {
   followingFeed?: () => void;
 }
 
+/**
+ * @notice Selectors used on every site after the site-specific ones.
+ * @dev Ad slots come first so an advertisement is classified as an ad rather than as a paragraph.
+ */
 export const GENERIC_SELECTORS: [string, string][] = [
   ['[aria-label*="dvertisement" i], [aria-label*="ponsored" i], ins.adsbygoogle, [id^="google_ads"], [data-ad-slot], [data-google-query-id]', 'ad'],
   ['p', 'paragraph'],
@@ -24,6 +33,11 @@ export const GENERIC_SELECTORS: [string, string][] = [
   ['[role=article]', 'post'],
 ];
 
+/**
+ * @notice Run a navigation at most once per page, even if the adapter is applied again.
+ * @param key Window property used as the latch.
+ * @param fn Navigation to perform.
+ */
 const once = (key: string, fn: () => void) => {
   const w = window as any;
   if (w[key]) return;
@@ -31,6 +45,9 @@ const once = (key: string, fn: () => void) => {
   fn();
 };
 
+/**
+ * @notice Adapters for X, YouTube, Reddit, Instagram, Facebook, and TikTok.
+ */
 export const ADAPTERS: SiteAdapter[] = [
   {
     hosts: ['x.com', 'twitter.com'],
@@ -90,6 +107,11 @@ export const ADAPTERS: SiteAdapter[] = [
   },
 ];
 
+/**
+ * @notice Find the adapter for a hostname.
+ * @param host Page hostname.
+ * @return The adapter, or undefined so the generic selectors are used alone.
+ */
 export function adapterFor(host: string): SiteAdapter | undefined {
   return ADAPTERS.find((a) => a.hosts.some((h) => host === h || host.endsWith('.' + h)));
 }

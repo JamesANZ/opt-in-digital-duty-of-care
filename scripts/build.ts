@@ -1,3 +1,8 @@
+/**
+ * @title Build
+ * @notice Bundle the desktop main process, preloads, browser UI, page agent, and mobile engine.
+ * @dev HTML keeps `<script src="*.js">`. Those files are emitted here and are not source.
+ */
 import { build } from 'esbuild';
 import fs from 'node:fs';
 import path from 'node:path';

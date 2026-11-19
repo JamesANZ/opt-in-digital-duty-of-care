@@ -1,9 +1,14 @@
 /**
- * Load KEY=value files into process.env.
- * Later files override earlier ones. Variables already set in the shell are left alone.
+ * @title Environment files
+ * @notice Load KEY=value files into `process.env`.
+ * @dev Later files override earlier ones. A variable already set in the shell is left alone.
  */
 import fs from 'node:fs';
 
+/**
+ * @notice Merge env files into the process environment.
+ * @param files Paths in override order. Missing files are skipped.
+ */
 export function loadEnv(files: readonly string[]): void {
   const merged: Record<string, string> = {};
   for (const file of files) {

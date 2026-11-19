@@ -1,10 +1,17 @@
+/**
+ * @title Engine tests
+ * @notice Checks rules, learning, profiles, encryption, JEV request shape, and the ads filter without a network call.
+ */
 import { describe, expect, it } from 'vitest';
 import {
   buildRequest, checkUrl, Classifier, defaultState, EncryptedStore, Engine, hashPin, JevClient, JevVerdict,
   makeProfile, MemoryBackend, parseResponse, randomKey, runRules, BUILTIN_CATEGORIES, verifyPin,
 } from '../src';
 
-/** Fake JEV that returns a scripted verdict, so pipeline logic is tested without network. */
+/**
+ * @title Scripted JEV
+ * @notice A fake classifier that returns a scripted verdict, so pipeline tests need no network.
+ */
 class ScriptedJev implements Classifier {
   calls: string[] = [];
   constructor(private fn: (text: string) => Partial<JevVerdict>) {}

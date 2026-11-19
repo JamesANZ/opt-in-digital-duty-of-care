@@ -1,7 +1,7 @@
 /**
- * DDoC Browser desktop shell (Windows, macOS, Linux).
- * Chromium content layer via Electron. The safety engine runs in this main process; pages get
- * the agent through a sandboxed preload in an isolated world, so sites cannot see or tamper with it.
+ * @title Desktop shell
+ * @notice Electron browser for Windows, macOS, and Linux. The safety engine runs in this process.
+ * @dev Pages receive the agent through a sandboxed preload, so site scripts cannot see or change it.
  */
 import { app, BrowserWindow, WebContentsView, ipcMain, session, Menu, safeStorage, protocol, net, shell, dialog, clipboard, Session } from 'electron';
 import * as fs from 'node:fs';
@@ -26,6 +26,11 @@ protocol.registerSchemesAsPrivileged([{ scheme: 'ddoc', privileges: { standard: 
 
 /* ---------------------------- persistence ---------------------------- */
 
+/**
+ * @notice A store backend that writes one file in the user-data directory.
+ * @param name File name, such as `engine.enc`.
+ * @return Read and write functions. Writes go to a temporary file and are then renamed.
+ */
 function fileBackend(name: string) {
   const f = path.join(DATA, name);
   return {
@@ -34,6 +39,10 @@ function fileBackend(name: string) {
   };
 }
 
+/**
+ * @notice Load or create the 32-byte store key, wrapped by the OS keychain.
+ * @return The raw key. Falls back to an unwrapped file when safeStorage is unavailable.
+ */
 function storeKey(): Uint8Array {
   const f = path.join(DATA, 'key.bin');
   if (fs.existsSync(f)) {
@@ -48,6 +57,9 @@ function storeKey(): Uint8Array {
   return k;
 }
 
+/**
+ * @notice Bookmarks and history kept beside the engine state.
+ */
 interface BrowserData {
   bookmarks: { title: string; url: string }[];
   history: { title: string; url: string; ts: number }[];
@@ -61,6 +73,9 @@ let saveTimer: NodeJS.Timeout | null = null;
 let unlockedUntil = 0;
 const downloads: { id: number; name: string; path: string; state: string; received: number; total: number }[] = [];
 
+/**
+ * @notice Write bookmarks and history shortly after they change, collapsing bursts of updates.
+ */
 function scheduleSave() {
   if (saveTimer) return;
   saveTimer = setTimeout(async () => {
@@ -70,6 +85,9 @@ function scheduleSave() {
   }, 800);
 }
 
+/**
+ * @notice Attach JEV when a key is configured, and drop it when the key or mode is cleared.
+ */
 function rebuildClassifier() {
   const s = engine.state.settings;
   const apiKey = s.jevApiKey || process.env.TYPESAFE_API_KEY;
@@ -78,12 +96,23 @@ function rebuildClassifier() {
 
 /* ------------------------------ windows ------------------------------ */
 
+/**
+ * @notice One tab: its view, title, URL, and loading flag.
+ */
 interface Tab { id: number; view: WebContentsView; title: string; url: string; loading: boolean; }
+/**
+ * @notice One browser window and the tabs it owns.
+ */
 interface Win { win: BrowserWindow; tabs: Tab[]; active: number; isPrivate: boolean; ses: Session; }
 const wins = new Map<number, Win>();
 let tabSeq = 0;
 const CHROME_H = 84;
 
+/**
+ * @notice Serve `ddoc://ui/` from the UI folder and other `ddoc://` paths from the build output.
+ * @param req The privileged-scheme request.
+ * @return The file, or 403 when the path escapes the folder.
+ */
 function ddocHandler(req: Request): Promise<Response> | Response {
   const u = new URL(req.url);
   const rel = path.normalize(decodeURIComponent(u.pathname)).replace(/^([/\\])+/, '');
@@ -93,6 +122,10 @@ function ddocHandler(req: Request): Promise<Response> | Response {
   return net.fetch(pathToFileURL(file).toString());
 }
 
+/**
+ * @notice Register the ddoc handler on a session and record its downloads.
+ * @param ses Persistent or private session.
+ */
 function attachSession(ses: Session) {
   // Every session (persistent and private) serves the internal ddoc:// pages.
   if (!ses.protocol.isProtocolHandled('ddoc')) ses.protocol.handle('ddoc', ddocHandler);
@@ -104,6 +137,10 @@ function attachSession(ses: Session) {
   });
 }
 
+/**
+ * @notice Open a browser window. Private windows are refused when the profile disallows them.
+ * @param isPrivate True for a private window, which keeps nothing on disk.
+ */
 function createWindow(isPrivate = false) {
   if (isPrivate && !engine.profile.allowPrivateWindows) {
     dialog.showMessageBox({ message: 'Private windows are turned off for this profile.' });
@@ -127,6 +164,10 @@ function createWindow(isPrivate = false) {
   return w;
 }
 
+/**
+ * @notice Place the active tab under the toolbar and hide the others.
+ * @param w Window to lay out.
+ */
 function layout(w: Win) {
   const [width, height] = w.win.getContentSize();
   w.tabs.forEach((t, i) => {
@@ -135,8 +176,18 @@ function layout(w: Win) {
   });
 }
 
+/**
+ * @notice Whether a URL is one of this browser's own pages.
+ * @param url Tab URL.
+ * @return True for `ddoc://` pages, which are not reloaded when filters change.
+ */
 function isInternal(url: string) { return url.startsWith('ddoc://'); }
 
+/**
+ * @notice Open a tab and start loading it.
+ * @param w Window that will own the tab.
+ * @param url Initial URL. Defaults to the new-tab page.
+ */
 function newTab(w: Win, url = 'ddoc://ui/newtab.html') {
   const view = new WebContentsView({
     webPreferences: {
@@ -184,6 +235,12 @@ function newTab(w: Win, url = 'ddoc://ui/newtab.html') {
   return tab;
 }
 
+/**
+ * @notice Stop navigation to a host on this profile's block list and show the blocked page.
+ * @param e Navigation event.
+ * @param url URL being opened.
+ * @param wc Web contents to redirect.
+ */
 function guardNavigation(e: Electron.Event, url: string, wc: Electron.WebContents) {
   try {
     const host = new URL(url).hostname;
@@ -192,6 +249,11 @@ function guardNavigation(e: Electron.Event, url: string, wc: Electron.WebContent
   } catch { /* ignore */ }
 }
 
+/**
+ * @notice Close a tab, or the window when it was the last tab.
+ * @param w Window that owns the tab.
+ * @param idx Tab index.
+ */
 function closeTab(w: Win, idx: number) {
   const t = w.tabs[idx];
   if (!t) return;
@@ -204,6 +266,9 @@ function closeTab(w: Win, idx: number) {
   broadcast();
 }
 
+/**
+ * @notice Push the current tabs, profile, and bookmark state to every toolbar.
+ */
 function broadcast() {
   for (const w of wins.values()) {
     if (w.win.isDestroyed()) continue;
@@ -220,6 +285,11 @@ function broadcast() {
   }
 }
 
+/**
+ * @notice Turn the address-bar text into a URL or a search.
+ * @param input What the user typed.
+ * @return An absolute URL. Bare words go to the profile's search engine.
+ */
 function toUrl(input: string): string {
   const s = input.trim();
   if (/^(https?|ddoc|file):\/\//i.test(s)) return s;
@@ -229,6 +299,11 @@ function toUrl(input: string): string {
 
 /* -------------------------------- IPC -------------------------------- */
 
+/**
+ * @notice Find the window that owns a web contents, whether it is the toolbar or a tab.
+ * @param sender Sender of an IPC message.
+ * @return The window, or undefined.
+ */
 function winOf(sender: Electron.WebContents): Win | undefined {
   const direct = wins.get(BrowserWindow.fromWebContents(sender)?.id ?? -1);
   if (direct) return direct;
@@ -236,6 +311,9 @@ function winOf(sender: Electron.WebContents): Win | undefined {
   return undefined;
 }
 
+/**
+ * @notice Register page, dashboard, and toolbar IPC. Dashboard calls are rejected unless they come from `ddoc://ui/`.
+ */
 function registerIpc() {
   // Page agent (untrusted pages): only page methods allowed.
   ipcMain.handle('ddoc:page', async (e, method: string, params: any) => {
@@ -371,6 +449,10 @@ app.on('window-all-closed', async () => {
 app.on('activate', () => { if (wins.size === 0) createWindow(false); });
 
 /** Demo seed so a fresh install shows the learning loop without an API key. */
+/**
+ * @notice Add demo examples when `DDOC_SEED_DEMO` is set, so the bundled forum shows filtering without a key.
+ * @param s Fresh engine state to mutate.
+ */
 function seedDemo(s: EngineState) {
   if (s.examples.length) return;
   const e = new Engine(s);

@@ -1,3 +1,8 @@
+/**
+ * @title Agent stylesheet
+ * @notice CSS injected into every page for blur, hide, labels, the teach dialog, and the block screen.
+ * @dev Rules use `!important` because host pages set their own styles. `.ddoc-ui` resets inheritance so the page cannot restyle the controls.
+ */
 export const AGENT_CSS = `
 .ddoc-pending{filter:blur(6px)!important;transition:filter .2s}
 .ddoc-blurred{filter:blur(14px)!important;pointer-events:none!important;user-select:none!important}

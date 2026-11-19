@@ -1,4 +1,7 @@
-/* DDoC Safety Dashboard. Shared UI logic; on mobile the same file runs against the native bridge. */
+/**
+ * @title Safety dashboard
+ * @notice Shared dashboard UI. On mobile the same file runs against the native bridge.
+ */
 import type { Action, CategorySetting, DesignRestrictions, JevMode, Profile, ProfileKind, Settings } from '../../../packages/core/src/profiles.ts';
 import type { Decision } from '../../../packages/core/src/engine.ts';
 import type { HarmCategory, HarmGroup } from '../../../packages/core/src/taxonomy.ts';
@@ -13,11 +16,24 @@ if (!mainEl) throw new Error('#main missing');
 const main: HTMLElement = mainEl;
 
 const ESC: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+/**
+ * @notice Escape text before it is placed in HTML.
+ * @param s Any value. Null and undefined become an empty string.
+ * @return Escaped text.
+ */
 const esc = (s: unknown) => String(s ?? '').replace(/[&<>"']/g, (c) => ESC[c] ?? c);
+/**
+ * @notice A short relative time for the decision log.
+ * @param ts Unix time in milliseconds.
+ * @return "just now", minutes, hours, or a date.
+ */
 const ago = (ts: number) => { const s = (Date.now() - ts) / 1000; return s < 60 ? 'just now' : s < 3600 ? `${Math.floor(s / 60)} min ago` : s < 86400 ? `${Math.floor(s / 3600)} h ago` : new Date(ts).toLocaleDateString(); };
 const ACTIONS: Record<string, string> = { allow: 'Allow', label: 'Label only', blur: 'Blur', hide: 'Hide', interstitial: 'Support screen', block_page: 'Block page' };
 const STAGE: Record<string, string> = { learned: 'Your examples', rule: 'On-device rule', jev: 'JEV', host: 'Site rule' };
 
+/**
+ * @notice The transparency report fields the overview page draws.
+ */
 interface DashReport {
   byCategory: Record<string, number>;
   byStage: Record<string, number>;
@@ -25,11 +41,29 @@ interface DashReport {
   counters: { filtered: number; localDecided: number; jevSent: number };
   learning: Record<string, { harmful: number; fine: number }>;
 }
+/**
+ * @notice A bookmark shown in the dashboard.
+ */
 interface Bookmark { title?: string; url: string }
+/**
+ * @notice One history entry.
+ */
 interface HistoryItem { ts: number; title?: string; url: string }
+/**
+ * @notice One download from this session.
+ */
 interface DownloadItem { name: string; path?: string; state: string; received: number }
+/**
+ * @notice Browser data the dashboard can list. The API key is not included.
+ */
 interface BrowserData { bookmarks: Bookmark[]; history: HistoryItem[]; downloads: DownloadItem[] }
+/**
+ * @notice Whether the active profile is PIN-locked and whether a PIN exists.
+ */
 interface LockState { locked: boolean; hasPin: boolean }
+/**
+ * @notice The `state` RPC payload, with the API key already masked.
+ */
 interface DashState {
   profiles: Profile[];
   settings: Settings;
@@ -41,11 +75,21 @@ interface DashState {
 }
 
 let S: DashState | null = null;
+/**
+ * @notice The state loaded for the current page.
+ * @return The dashboard state. Throws before the first successful load.
+ */
 function state(): DashState {
   if (!S) throw new Error('Dashboard state is not loaded');
   return S;
 }
 
+/**
+ * @notice Call the engine, asking for the parent PIN when a locked profile refuses the change.
+ * @param method Dashboard method.
+ * @param params Method parameters.
+ * @return The result, or null when the user cancels the PIN prompt or the call fails.
+ */
 async function call(method: string, params?: unknown): Promise<unknown> {
   try { return await A.call(method, params); }
   catch (e) {
@@ -54,6 +98,10 @@ async function call(method: string, params?: unknown): Promise<unknown> {
     alertBox(message); return null;
   }
 }
+/**
+ * @notice Show an error at the top of the page for a few seconds.
+ * @param msg Error text.
+ */
 function alertBox(msg: string) {
   const p = document.createElement('div');
   p.className = 'panel err';
@@ -62,6 +110,10 @@ function alertBox(msg: string) {
   setTimeout(() => p.remove(), 5000);
 }
 
+/**
+ * @notice Ask for the parent PIN.
+ * @return True when the PIN unlocks the session.
+ */
 function askPin(): Promise<boolean> {
   return new Promise((resolve) => {
     const m = document.getElementById('pin');
@@ -86,8 +138,16 @@ function askPin(): Promise<boolean> {
   });
 }
 
+/**
+ * @notice Reload dashboard state from the engine.
+ */
 async function load() { S = await A.call('state') as DashState; }
 
+/**
+ * @notice Render a bar chart for category or stage counts.
+ * @param obj Counts keyed by label.
+ * @return HTML, or an empty-state message.
+ */
 function bars(obj: Record<string, number>) {
   const entries = Object.entries(obj).sort((a, b) => b[1] - a[1]);
   if (!entries.length) return '<div class="empty">Nothing filtered yet.</div>';
@@ -95,6 +155,9 @@ function bars(obj: Record<string, number>) {
   return '<div class="bars">' + entries.map(([k, v]) => `<div class="b"><span>${esc(STAGE[k] ?? k)}</span><div class="track"><div class="fill" style="width:${(v / max) * 100}%"></div></div><b>${v}</b></div>`).join('') + '</div>';
 }
 
+/**
+ * @notice One renderer per dashboard page. Each returns the HTML for `#main`.
+ */
 const views: Record<string, () => Promise<string>> = {
   async overview() {
     const S = state();
@@ -265,11 +328,18 @@ const views: Record<string, () => Promise<string>> = {
   },
 };
 
+/**
+ * @notice The profile the dashboard is currently showing.
+ * @return The active profile, or the first profile.
+ */
 function profile() {
   const S = state();
   return S.profiles.find((p) => p.id === S.settings.activeProfileId) ?? S.profiles[0]!;
 }
 
+/**
+ * @notice Draw the page named by the URL hash and wire its controls.
+ */
 async function route() {
   const v = (location.hash || '#overview').slice(1);
   document.querySelectorAll('#nav a').forEach((a) => a.classList.toggle('on', a.getAttribute('href') === '#' + v));
@@ -283,6 +353,9 @@ async function route() {
   main.focus();
 }
 
+/**
+ * @notice Attach the current page's buttons and forms to engine calls.
+ */
 function wire() {
   const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T | null;
   const on = (sel: string, fn: (el: HTMLElement) => void) => main.querySelectorAll<HTMLElement>(sel).forEach(fn);
@@ -394,6 +467,10 @@ function wire() {
   on('[data-unbm]', (b) => { b.onclick = async () => { await A.call('removeBookmark', { url: b.dataset.unbm }); void route(); }; });
   on('[data-show]', (b) => { b.onclick = () => A.chrome('openDownload', b.dataset.show); });
 }
+/**
+ * @notice Ask before wiping taught examples and the decision log.
+ * @return True when the user confirms.
+ */
 function confirmBox() { return window.confirm('Delete everything DDoC has learned and its decision log? This cannot be undone.'); }
 
 window.addEventListener('hashchange', () => { void route(); });

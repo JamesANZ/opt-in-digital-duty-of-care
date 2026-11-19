@@ -1,8 +1,19 @@
-/* Mobile: gives the shared dashboard the same window.ddocAdmin API the desktop preload exposes. */
+/**
+ * @title Mobile dashboard bridge
+ * @notice Gives the shared dashboard the same `window.ddocAdmin` API the desktop preload exposes.
+ * @dev iOS replies through a promise. Android replies through `onmessage`.
+ */
 (() => {
   if (window.ddocAdmin) return;
   let seq = 0;
   const pending: Record<number, { res: (value: unknown) => void; rej: (err: Error) => void }> = {};
+  /**
+   * @notice Send one dashboard or chrome call to the native shell.
+   * @param kind `admin` or `chrome`.
+   * @param method Method or command name.
+   * @param params Optional parameters.
+   * @return The result. Rejects with the native error message.
+   */
   function send(kind: string, method: string, params?: unknown): Promise<unknown> {
     const id = ++seq;
     const msg = JSON.stringify({ id, kind, method, params: params ?? {} });

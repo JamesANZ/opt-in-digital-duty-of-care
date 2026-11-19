@@ -1,17 +1,27 @@
 /**
- * Harm taxonomy mapped to the Online Safety Amendment (Digital Duty of Care) Bill 2026.
- * See docs/LEGISLATIVE_MAPPING.md for sources. Categories are data, so a Minister-extended
- * category can ship as configuration without code changes.
+ * @title Harm taxonomy
+ * @notice Categories used by the safety engine, mapped to the Online Safety Amendment (Digital Duty of Care) Bill 2026.
+ * @dev Categories are data, so a Minister-extended category can ship as configuration without a code change. Sources are in docs/LEGISLATIVE_MAPPING.md.
  */
 
+/**
+ * @notice Which part of the Bill a category belongs to.
+ * @dev `seriously_harmful` applies to every profile. `harmful_to_children` is on for under-18 profiles. `other` covers ads, scams, and user categories.
+ */
 export type HarmGroup = 'seriously_harmful' | 'harmful_to_children' | 'other';
 
+/**
+ * @notice A support or reporting service shown with a filtering decision.
+ */
 export interface HelpResource {
   name: string;
   phone?: string;
   url: string;
 }
 
+/**
+ * @notice One harm the engine can filter, including a user-created category.
+ */
 export interface HarmCategory {
   id: string;
   label: string;
@@ -35,6 +45,10 @@ const BUTTERFLY: HelpResource = { name: 'Butterfly Foundation', phone: '1800 33 
 const ESAFETY: HelpResource = { name: 'eSafety Commissioner: report', url: 'https://www.esafety.gov.au/report' };
 const SCAMWATCH: HelpResource = { name: 'Scamwatch', url: 'https://www.scamwatch.gov.au/report-a-scam' };
 
+/**
+ * @notice Built-in categories shipped with the browser.
+ * @return The category list in Bill order: seriously harmful, harmful to children, then other.
+ */
 export const BUILTIN_CATEGORIES: HarmCategory[] = [
   // Seriously harmful material and conduct (all users)
   { id: 'csea', label: 'Child sexual exploitation', group: 'seriously_harmful', noReveal: true,
@@ -92,7 +106,10 @@ export const BUILTIN_CATEGORIES: HarmCategory[] = [
     billRef: 'Default filter, decided by JEV' },
 ];
 
-/** Contexts that represent protected expression. These raise the threshold instead of hiding. */
+/**
+ * @notice Communicative contexts JEV is asked to choose from.
+ * @dev Protected contexts are labelled rather than hidden, except for the hard categories in the engine.
+ */
 export const CONTEXTS: Record<string, string> = {
   direct_harm: 'The text itself carries out, promotes or encourages the harm.',
   news_reporting: 'Journalism or factual reporting about events, including harmful ones.',
@@ -104,11 +121,19 @@ export const CONTEXTS: Record<string, string> = {
   benign: 'Everyday content unrelated to any harm.',
 };
 
+/**
+ * @notice Contexts treated as protected expression.
+ * @dev A decision in one of these contexts is labelled instead of hidden, unless the category is hard and the severity is high.
+ */
 export const PROTECTED_CONTEXTS = new Set([
   'news_reporting', 'education_research', 'satire_parody', 'political_expression',
   'ordinary_disagreement', 'support_recovery',
 ]);
 
+/**
+ * @notice Severity scale sent to JEV as the score criteria, from none to severe.
+ * @dev Index 0 is harmless. The engine compares the returned score with a per-profile minimum.
+ */
 export const SEVERITY_LEVELS = [
   'None: harmless.',
   'Mild: rude, crude or edgy but not harmful.',
@@ -117,6 +142,12 @@ export const SEVERITY_LEVELS = [
   'Severe: illegal or life-threatening content.',
 ];
 
+/**
+ * @notice Look up a category by its id.
+ * @param cats Categories to search, built-in and custom.
+ * @param id Category id.
+ * @return The matching category, or undefined.
+ */
 export function categoryById(cats: HarmCategory[], id: string): HarmCategory | undefined {
   return cats.find((c) => c.id === id);
 }

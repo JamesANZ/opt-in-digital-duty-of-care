@@ -1,6 +1,6 @@
 /**
- * Exercises the exact bundle that Android and iOS load (dist/shared/ddoc-engine.js), with a
- * stubbed native layer, so the mobile engine path is tested even without the mobile toolchains.
+ * @title Mobile host tests
+ * @notice Runs the bundle Android and iOS load, with a stubbed native layer, so that path is tested without the mobile toolchains.
  */
 import { describe, expect, it } from 'vitest';
 import fs from 'node:fs';
@@ -9,6 +9,10 @@ import vm from 'node:vm';
 
 const bundle = path.resolve(__dirname, '../../../dist/shared/ddoc-engine.js');
 
+/**
+ * @notice Load the engine bundle in a VM with a fake native bridge.
+ * @return The host object plus the saves and fetches it recorded.
+ */
 function boot() {
   const saved: string[] = [];
   const fetches: { id: number; url: string; init: string }[] = [];

@@ -1,9 +1,30 @@
+/**
+ * @title Profiles and settings
+ * @notice Profile defaults, parent PIN hashing, and the encoding helpers the encrypted store uses.
+ */
+
 import { BUILTIN_CATEGORIES, HarmCategory } from './taxonomy';
 
+/**
+ * @notice What the browser does with a matching block.
+ * @dev `allow` shows it. `label` marks it. `blur`, `hide`, `interstitial`, and `block_page` hide progressively more.
+ */
 export type Action = 'allow' | 'label' | 'blur' | 'hide' | 'interstitial' | 'block_page';
+
+/**
+ * @notice Who a profile is for. Child and teen profiles lock settings behind the parent PIN.
+ */
 export type ProfileKind = 'adult' | 'teen' | 'child';
+
+/**
+ * @notice How much text is eligible to be sent to JEV.
+ * @dev `off` stays on device. `risky_only` sends risk signals, custom categories, and ad candidates. `all` sends undecided blocks.
+ */
 export type JevMode = 'off' | 'risky_only' | 'all';
 
+/**
+ * @notice How one category is configured on one profile.
+ */
 export interface CategorySetting {
   enabled: boolean;
   /** 0 = least sensitive, 1 = most sensitive. */
@@ -11,7 +32,10 @@ export interface CategorySetting {
   action: Action;
 }
 
-/** Design-feature restrictions mirroring the Bill's under-16 provisions. */
+/**
+ * @notice Feed controls that mirror the Bill's under-16 design protections.
+ * @dev These change what this browser shows. They do not change a site's ranking.
+ */
 export interface DesignRestrictions {
   hideRecommendations: boolean; // "For you", "Suggested", "Up next" rails
   stopInfiniteScroll: boolean; // pause feed after `scrollLimit` items
@@ -22,6 +46,9 @@ export interface DesignRestrictions {
   preferFollowingFeed: boolean; // "My Feed, My Way"
 }
 
+/**
+ * @notice A person using this browser. No name, birthday, or identity document is required.
+ */
 export interface Profile {
   id: string;
   name: string;
@@ -37,6 +64,9 @@ export interface Profile {
   locked: boolean;
 }
 
+/**
+ * @notice Device-wide settings shared by every profile.
+ */
 export interface Settings {
   activeProfileId: string;
   jevMode: JevMode;
@@ -59,6 +89,12 @@ const U16_DESIGN: DesignRestrictions = {
   hideEphemeral: true, disableAutoplay: true, preferFollowingFeed: true,
 };
 
+/**
+ * @notice Default category settings for a new profile of `kind`.
+ * @param kind Adult, teen, or child.
+ * @param cats Categories to configure. Built-in categories are the usual list.
+ * @return Settings keyed by category id. CSEA blocks the page. Ads start hidden.
+ */
 function defaultsFor(kind: ProfileKind, cats: HarmCategory[]): Record<string, CategorySetting> {
   const out: Record<string, CategorySetting> = {};
   for (const c of cats) {
@@ -81,7 +117,12 @@ function defaultsFor(kind: ProfileKind, cats: HarmCategory[]): Record<string, Ca
   return out;
 }
 
-/** Fill in built-in categories added after a profile was saved. Existing choices are left as they are. */
+/**
+ * @notice Add settings for built-in categories that a saved profile does not have yet.
+ * @dev Existing choices are left as they are. Used when a new built-in category ships, such as ads.
+ * @param profiles Profiles to update in place.
+ * @param cats Categories that should have a setting. Defaults to the built-in list.
+ */
 export function applyBuiltinDefaults(profiles: Profile[], cats: HarmCategory[] = BUILTIN_CATEGORIES) {
   for (const p of profiles) {
     const defaults = defaultsFor(p.kind, cats);
@@ -91,6 +132,14 @@ export function applyBuiltinDefaults(profiles: Profile[], cats: HarmCategory[] =
   }
 }
 
+/**
+ * @notice Create a profile with the defaults for its kind.
+ * @param id Profile id.
+ * @param name Name shown in the toolbar and dashboard.
+ * @param kind Adult, teen, or child.
+ * @param cats Categories to configure. Defaults to the built-in list.
+ * @return A profile. Child and teen profiles are locked and get the under-16 feed controls.
+ */
 export function makeProfile(id: string, name: string, kind: ProfileKind, cats: HarmCategory[] = BUILTIN_CATEGORIES): Profile {
   return {
     id, name, kind,
@@ -104,6 +153,10 @@ export function makeProfile(id: string, name: string, kind: ProfileKind, cats: H
   };
 }
 
+/**
+ * @notice Settings for a fresh install.
+ * @return Balanced JEV mode, DuckDuckGo search, and no sharing of examples.
+ */
 export function defaultSettings(): Settings {
   return {
     activeProfileId: 'me',
@@ -114,7 +167,13 @@ export function defaultSettings(): Settings {
   };
 }
 
-/* PIN hashing with PBKDF2 (WebCrypto works in Node 22, Electron, WKWebView, Android WebView). */
+/**
+ * @notice Hash a parent PIN with PBKDF2-SHA256.
+ * @dev 210,000 iterations. WebCrypto is used so the same code runs in Node, Electron, WKWebView, and Android WebView.
+ * @param pin PIN to hash.
+ * @param saltB64 Existing salt, base64. A new 16-byte salt is created when omitted.
+ * @return Base64 hash and salt.
+ */
 export async function hashPin(pin: string, saltB64?: string): Promise<{ hash: string; salt: string }> {
   const subtle = globalThis.crypto.subtle;
   const salt = saltB64 ? bytes(b64d(saltB64)) : globalThis.crypto.getRandomValues(new Uint8Array(16));
@@ -123,24 +182,45 @@ export async function hashPin(pin: string, saltB64?: string): Promise<{ hash: st
   return { hash: b64e(new Uint8Array(bits)), salt: b64e(salt) };
 }
 
+/**
+ * @notice Check a parent PIN against the stored hash.
+ * @param pin PIN the user entered.
+ * @param settings Settings that hold the hash and salt.
+ * @return True when the PIN matches, or when no PIN has been set.
+ */
 export async function verifyPin(pin: string, settings: Settings): Promise<boolean> {
   if (!settings.parentPinHash || !settings.parentPinSalt) return true;
   const { hash } = await hashPin(pin, settings.parentPinSalt);
   return hash === settings.parentPinHash;
 }
 
-/** Copy into a fresh ArrayBuffer. WebCrypto rejects a view whose buffer is only ArrayBufferLike. */
+/**
+ * @notice Copy bytes into a fresh ArrayBuffer.
+ * @dev WebCrypto rejects a view whose buffer is only ArrayBufferLike, which TypeScript 7's DOM types allow.
+ * @param data Bytes to copy.
+ * @return A Uint8Array backed by a real ArrayBuffer.
+ */
 export function bytes(data: Uint8Array): Uint8Array<ArrayBuffer> {
   const copy = new Uint8Array(data.byteLength);
   copy.set(data);
   return copy;
 }
 
+/**
+ * @notice Encode bytes as base64.
+ * @param u Bytes to encode.
+ * @return Base64 text.
+ */
 export function b64e(u: Uint8Array): string {
   let s = '';
   for (const b of u) s += String.fromCharCode(b);
   return btoa(s);
 }
+/**
+ * @notice Decode base64 into bytes.
+ * @param s Base64 text.
+ * @return Decoded bytes. The backing buffer may be ArrayBufferLike, so WebCrypto callers should wrap it with `bytes`.
+ */
 export function b64d(s: string): Uint8Array {
   return Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
 }

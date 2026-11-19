@@ -1,7 +1,7 @@
 /**
- * MOCK JEV server for offline development, demos and CI. It speaks the real
- * POST /v1/systemone wire format but uses crude keyword heuristics, NOT the real model.
- * Never use for accuracy claims; run scripts/eval.ts with TYPESAFE_API_KEY for that.
+ * @title Mock JEV
+ * @notice An offline stand-in that speaks POST /v1/systemone.
+ * @dev Keyword heuristics, not the real model. Do not cite its answers as accuracy. Use `scripts/eval.ts` with a real key for that.
  */
 import http from 'node:http';
 import { pathToFileURL } from 'node:url';
@@ -28,15 +28,29 @@ const CTX: Record<string, string[]> = {
   support_recovery: ['recovery', 'reach out', 'helpline', 'you are not alone'],
 };
 
+/**
+ * @notice One question in a System One request, either a choice or a yes/no score.
+ */
 interface Question { type?: string; criteria?: Record<string, unknown>; instructions?: string }
 
+/**
+ * @notice The request fields the mock reads.
+ */
 interface JevBody {
   state?: { content?: { text?: string } };
   questions?: Record<string, Question>;
 }
 
+/**
+ * @notice A mock choice answer, matching JEV's choice shape.
+ */
 interface ChoiceAnswer { choice: string; confidence: number; probabilities: Record<string, number> }
 
+/**
+ * @notice Answer one System One request from keyword lists.
+ * @param body Request JSON.
+ * @return A response shaped like JEV's, labelled as a mock.
+ */
 function classify(body: JevBody) {
   const text = String(body?.state?.content?.text ?? JSON.stringify(body.state)).toLowerCase();
   const answers: Record<string, ChoiceAnswer | { score: number; confidence: number } | { noul: number }> = {};
@@ -70,6 +84,11 @@ function classify(body: JevBody) {
   return { model: 'mock-jev (heuristic, not the real model)', answers };
 }
 
+/**
+ * @notice Listen for mock classification requests.
+ * @param port Port on 127.0.0.1. Defaults to 4778.
+ * @return The listening server.
+ */
 export function startMockJev(port = 4778): Promise<http.Server> {
   const srv = http.createServer((req, res) => {
     if (req.method !== 'POST' || !req.url?.endsWith('/v1/systemone')) { res.writeHead(404); return res.end(); }

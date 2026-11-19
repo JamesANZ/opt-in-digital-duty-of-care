@@ -1,3 +1,8 @@
+/**
+ * @title Page preload
+ * @notice Gives internal ddoc:// pages the dashboard bridge, and web pages the filtering agent.
+ * @dev The main process checks the sender URL again on every dashboard call.
+ */
 import { contextBridge, ipcRenderer } from 'electron';
 
 if (location.protocol === 'ddoc:') {

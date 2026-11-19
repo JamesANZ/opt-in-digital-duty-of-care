@@ -1,3 +1,7 @@
+/**
+ * @title Chrome preload
+ * @notice Exposes `ddocChrome` to the toolbar page. Page scripts cannot reach ipcRenderer.
+ */
 import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('ddocChrome', {
