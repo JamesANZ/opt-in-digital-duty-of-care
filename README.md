@@ -2,7 +2,7 @@
 
 A privacy-first, open-source browser that puts online safety in the user's hands. It implements the user-side objectives of Australia's **Online Safety Amendment (Digital Duty of Care) Bill 2026** with personal, explainable AI filtering powered by **JEV** (TypeSafe AI) plus on-device learning.
 
-Your filters change only what *you* see. Nothing is shared, no block lists are on by default, and every decision is explained and reversible.
+Your filters change only what *you* see. Nothing is shared, host block lists are empty until you add one, and every decision is explained and reversible. Ads are the one filter that starts on: JEV hides a block when it judges the block itself to be an ad.
 
 ![Forum with DDoC filtering](docs/screenshots/02-forum-adult-labels.png)
 
@@ -12,7 +12,7 @@ Your filters change only what *you* see. Nothing is shared, no block lists are o
 |---|---|---|
 | Shared safety engine (taxonomy, JEV client, on-device learning, policy, profiles, encryption, RPC) | `packages/core` | Built and tested |
 | Shared in-page agent (block detection, blur/label/hide/support screens, teach-by-selection, feed controls, scam-link guard) | `packages/page-agent` | Built, running in desktop |
-| **Desktop browser** for Windows, macOS, Linux (Electron / Chromium): tabs, bookmarks, history, downloads, private windows, Safety Dashboard | `apps/desktop` | **Runs** |
+| **Desktop browser** for Windows, macOS, Linux (Electron / Chromium): tabs, bookmarks, history, downloads, private windows, Safety Dashboard, app logo | `apps/desktop` | **Runs** |
 | **Android** app (Kotlin, WebView + androidx.webkit, Keystore-encrypted state) | `apps/android` | Source complete; build with Android SDK |
 | **iOS** app (SwiftUI, WKWebView with an isolated content world, Keychain + CryptoKit) | `apps/ios` | Source complete; build with Xcode on macOS |
 | Legislative mapping, architecture, privacy, risk assessment, roadmap | `docs/` | Done |
@@ -27,7 +27,7 @@ npm test
 npm start                      # launches DDoC Browser
 ```
 
-JEV: set your TypeSafe key in **Safety Dashboard > Privacy & JEV**, or copy `.env.example` to `.env` and fill in `TYPESAFE_API_KEY`. The desktop app and `scripts/eval.mjs` load that file; a shell export wins if both are set. Without a key DDoC runs on-device only (your examples + safety rules). Android and iOS do not read `.env`; set the key in the dashboard on those apps.
+JEV: set your TypeSafe key in **Safety Dashboard > Privacy & JEV**, or copy `.env.example` to `.env` and fill in `TYPESAFE_API_KEY`. The desktop app loads that file and `apps/desktop/.env` (the desktop file wins). `scripts/eval.mjs` loads the repo-root file. A shell export wins over either file. Without a key, harm checks stay on-device and the ads filter does nothing until JEV is configured. Android and iOS do not read `.env`; their `.env.example` files say to set the key in the dashboard. Profiles saved before the ads filter existed pick it up the next time the engine starts.
 
 Demo with the bundled test forum and a *mock* JEV server (heuristic stand-in, for offline demos only):
 
@@ -48,9 +48,10 @@ Packaging: `npm --workspace apps/desktop run dist:win | dist:mac | dist:linux` (
 ## How filtering works
 
 1. **On-device**: your taught examples (similarity matching across all sites), plus high-precision safety rules. Always on, works offline.
-2. **JEV**: only undecided text is sent, without URL or identity. One call asks which harm (if any), the communicative context (news, education, satire, political expression, support...), severity, and your custom categories.
-3. **Policy**: your profile, sensitivity and the context decide: allow, label, blur, hide, support screen, or block page. Protected expression is labelled, not hidden.
-4. **Explain and correct**: every item has *Why?*, *Show* and *Not harmful*. Corrections become negative examples.
+2. **JEV**: undecided text is sent without URL or identity. In balanced mode that is only text with a risk signal, text that looks like an ad, or a block marked as an ad slot. One call asks which harm (if any), the communicative context (news, education, satire, political expression, support...), severity, and your custom categories. Ads are a separate yes/no question, not one of the harm choices. Ad-like text that is not otherwise risky is sent with only that question.
+3. **Your categories**: create one under **Teach & learned**. It shows in the list there and is selected for the next example. The description is the question JEV is asked. Add an example if you also want an on-device match.
+4. **Policy**: your profile, sensitivity and the context decide: allow, label, blur, hide, support screen, or block page. Protected expression is labelled, not hidden. An ad is hidden even when the surrounding page reads as news or opinion, because the question is whether that block itself is an ad.
+5. **Explain and correct**: every item has *Why?*, *Show* and *Not harmful*. Corrections become negative examples. Adding or deleting a category or example reloads open web pages so the change applies immediately.
 
 ## Evaluation
 
