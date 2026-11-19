@@ -117,7 +117,7 @@ export function defaultSettings(): Settings {
 /* PIN hashing with PBKDF2 (WebCrypto works in Node 22, Electron, WKWebView, Android WebView). */
 export async function hashPin(pin: string, saltB64?: string): Promise<{ hash: string; salt: string }> {
   const subtle = globalThis.crypto.subtle;
-  const salt = saltB64 ? b64d(saltB64) : globalThis.crypto.getRandomValues(new Uint8Array(16));
+  const salt = saltB64 ? bytes(b64d(saltB64)) : globalThis.crypto.getRandomValues(new Uint8Array(16));
   const key = await subtle.importKey('raw', new TextEncoder().encode(pin), 'PBKDF2', false, ['deriveBits']);
   const bits = await subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations: 210_000 }, key, 256);
   return { hash: b64e(new Uint8Array(bits)), salt: b64e(salt) };
@@ -127,6 +127,13 @@ export async function verifyPin(pin: string, settings: Settings): Promise<boolea
   if (!settings.parentPinHash || !settings.parentPinSalt) return true;
   const { hash } = await hashPin(pin, settings.parentPinSalt);
   return hash === settings.parentPinHash;
+}
+
+/** Copy into a fresh ArrayBuffer. WebCrypto rejects a view whose buffer is only ArrayBufferLike. */
+export function bytes(data: Uint8Array): Uint8Array<ArrayBuffer> {
+  const copy = new Uint8Array(data.byteLength);
+  copy.set(data);
+  return copy;
 }
 
 export function b64e(u: Uint8Array): string {

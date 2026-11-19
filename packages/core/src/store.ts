@@ -5,7 +5,7 @@
  *  - iOS: Keychain
  * Private windows use MemoryBackend and never touch disk.
  */
-import { b64d, b64e } from './profiles';
+import { b64d, b64e, bytes } from './profiles';
 
 export interface Backend {
   read(): Promise<string | null>;
@@ -23,14 +23,14 @@ export class EncryptedStore<T> {
 
   constructor(private backend: Backend, rawKey: Uint8Array) {
     if (rawKey.length !== 32) throw new Error('Store key must be 32 bytes');
-    this.keyP = globalThis.crypto.subtle.importKey('raw', rawKey, 'AES-GCM', false, ['encrypt', 'decrypt']);
+    this.keyP = globalThis.crypto.subtle.importKey('raw', bytes(rawKey), 'AES-GCM', false, ['encrypt', 'decrypt']);
   }
 
   async load(fallback: T): Promise<T> {
     const raw = await this.backend.read();
     if (!raw) return fallback;
     const { iv, ct } = JSON.parse(raw);
-    const pt = await globalThis.crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64d(iv) }, await this.keyP, b64d(ct));
+    const pt = await globalThis.crypto.subtle.decrypt({ name: 'AES-GCM', iv: bytes(b64d(iv)) }, await this.keyP, bytes(b64d(ct)));
     return JSON.parse(new TextDecoder().decode(pt));
   }
 
