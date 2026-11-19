@@ -1,0 +1,26 @@
+{
+  "name": "ddoc-desktop",
+  "productName": "DDoC Browser",
+  "version": "0.1.0",
+  "description": "Digital Duty of Care Browser: privacy-first, AI-powered personal safety browser",
+  "main": "dist/main.js",
+  "license": "MPL-2.0",
+  "scripts": {
+    "start": "electron .",
+    "dist:win": "electron-builder --win",
+    "dist:mac": "electron-builder --mac",
+    "dist:linux": "electron-builder --linux"
+  },
+  "devDependencies": {
+    "electron": "^38.0.0"
+  },
+  "build": {
+    "appId": "au.ddoc.browser",
+    "productName": "DDoC Browser",
+    "files": ["dist/**", "ui/**", "package.json"],
+    "icon": "ui/icon.png",
+    "mac": { "category": "public.app-category.productivity", "hardenedRuntime": true },
+    "win": { "target": ["nsis"] },
+    "linux": { "target": ["AppImage", "deb"], "category": "Network" }
+  }
+}

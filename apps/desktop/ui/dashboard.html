@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' ddoc:; style-src 'self' 'unsafe-inline'; script-src 'self' ddoc:">
+<title>Safety Dashboard</title>
+<link rel="stylesheet" href="dash.css">
+</head>
+<body>
+<aside>
+  <div class="brand"><img class="logo" src="icon.png" alt="" width="32" height="32"><div><b>DDoC</b><small>Digital Duty of Care</small></div></div>
+  <nav id="nav">
+    <a href="#overview">Overview</a>
+    <a href="#decisions">Filtered content</a>
+    <a href="#learning">Teach &amp; learned</a>
+    <a href="#categories">Categories &amp; sensitivity</a>
+    <a href="#profiles">Profiles &amp; parental</a>
+    <a href="#feeds">Feed controls</a>
+    <a href="#privacy">Privacy &amp; JEV</a>
+    <a href="#law">Legislation coverage</a>
+    <hr>
+    <a href="#bookmarks">Bookmarks</a>
+    <a href="#history">History</a>
+    <a href="#downloads">Downloads</a>
+  </nav>
+  <div id="who" class="who"></div>
+</aside>
+<main id="main" tabindex="-1"></main>
+<div id="pin" class="modal" hidden>
+  <form class="card" id="pin-form">
+    <h3>Parent PIN required</h3>
+    <p class="mute">This profile is protected. Enter the parent PIN to change settings.</p>
+    <input id="pin-input" type="password" inputmode="numeric" autocomplete="off" aria-label="Parent PIN">
+    <div class="row"><button type="button" id="pin-cancel">Cancel</button><button class="primary">Unlock</button></div>
+    <p id="pin-err" class="err"></p>
+  </form>
+</div>
+<script src="dashboard.js"></script>
+</body>
+</html>

@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' ddoc:; style-src 'self' 'unsafe-inline'; script-src 'self' ddoc:">
+<title>DDoC Browser</title>
+<link rel="stylesheet" href="chrome.css">
+</head>
+<body>
+  <div id="tabstrip" role="tablist" aria-label="Tabs">
+    <div id="tabs"></div>
+    <button id="newtab" class="icon" title="New tab (Ctrl+T)" aria-label="New tab">+</button>
+    <div class="spacer"></div>
+    <span id="private-badge" hidden>Private</span>
+  </div>
+  <div id="toolbar">
+    <button id="back" class="icon" title="Back" aria-label="Back">&#8592;</button>
+    <button id="fwd" class="icon" title="Forward" aria-label="Forward">&#8594;</button>
+    <button id="reload" class="icon" title="Reload" aria-label="Reload">&#8635;</button>
+    <form id="omni-form"><input id="omni" spellcheck="false" autocomplete="off" placeholder="Search or enter address" aria-label="Address and search bar"></form>
+    <button id="star" class="icon" title="Bookmark this page" aria-label="Bookmark">&#9734;</button>
+    <button id="shield" class="shield" title="Safety Dashboard" aria-label="Safety dashboard">
+      <img class="shield-ico" src="icon.png" alt="" width="18" height="18"><span id="filtered">0</span>
+    </button>
+    <button id="profile" class="profile" title="Profile"></button>
+    <button id="menu" class="icon" title="Menu" aria-label="Menu">&#8942;</button>
+  </div>
+  <div id="menu-pop" class="pop" hidden>
+    <button data-cmd="newWindow">New window</button>
+    <button data-cmd="privateWindow">New private window</button>
+    <hr>
+    <button data-dash="bookmarks">Bookmarks</button>
+    <button data-dash="history">History</button>
+    <button data-dash="downloads">Downloads</button>
+    <hr>
+    <button data-dash="overview">Safety dashboard</button>
+    <button data-dash="learning">What I've taught DDoC</button>
+    <button data-dash="profiles">Profiles &amp; parental controls</button>
+    <button data-dash="privacy">Privacy &amp; JEV settings</button>
+  </div>
+  <script src="chrome.js"></script>
+</body>
+</html>

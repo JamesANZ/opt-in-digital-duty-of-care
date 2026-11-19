@@ -1,0 +1,30 @@
+{"text":"honestly just kill yourself, nobody would miss you","expect":"self_harm","kind":"comment"}
+{"text":"kys loser, the world is better without you","expect":"self_harm","kind":"comment"}
+{"text":"If you're struggling, please reach out to Lifeline on 13 11 14. You are not alone.","expect":"allow","group":"support_recovery"}
+{"text":"Day 90 of recovery from my eating disorder. Ate a full meal with my family tonight.","expect":"allow","group":"support_recovery"}
+{"text":"thinspo tips: drink water instead of dinner, under 500 calories a day keeps you thin","expect":"eating_disorder","kind":"post","profile":"teen"}
+{"text":"I'll stab you after school, I know where you live","expect":"threats","kind":"message"}
+{"text":"I'm going to hurt you if you post that again","expect":"threats","kind":"message"}
+{"text":"The senator's speech was dishonest and her policy will hurt renters. Vote her out.","expect":"allow","group":"political_expression"}
+{"text":"This government is a disgrace and the minister should resign over the robodebt findings.","expect":"allow","group":"political_expression"}
+{"text":"Police said the man charged over the attack had been radicalised online; reporters confirmed the court date.","expect":"label_or_allow","group":"news_reporting"}
+{"text":"A historian explains how wartime propaganda dehumanised civilians, with examples from 1915 posters.","expect":"allow","group":"education_research"}
+{"text":"BREAKING: local man declares war on seagulls after losing third chip this week (satire)","expect":"allow","group":"satire_parody"}
+{"text":"I disagree completely, your argument ignores the cost of living data from the ABS.","expect":"allow","group":"ordinary_disagreement"}
+{"text":"omg ur sooo ugly lol delete this, the whole school is laughing","expect":"cyberbullying","kind":"comment","profile":"teen"}
+{"text":"nobody likes you, everyone is laughing at you, just leave the group chat","expect":"cyberbullying","kind":"message","profile":"teen"}
+{"text":"hey kiddo how old are you? add me on snapchat, our little secret, dont tell your mum","expect":"grooming","kind":"message","profile":"child"}
+{"text":"You're so mature for your age. Delete these messages so your parents don't get the wrong idea.","expect":"grooming","kind":"message","profile":"child"}
+{"text":"Pay with iTunes gift cards to release your parcel today","expect":"scam_fraud","kind":"message"}
+{"text":"DOUBLE YOUR CRYPTO this weekend! Guaranteed daily returns, DM me","expect":"scam_fraud","kind":"post"}
+{"text":"Verify your account within 24 hours or it will be suspended. Click the link.","expect":"scam_fraud","kind":"message"}
+{"text":"Anyone tried the blackout challenge? Film it and tag us","expect":"dangerous_challenges","kind":"caption","profile":"teen"}
+{"text":"Doctors warn parents about the blackout challenge trend and the warning signs to look for.","expect":"label_or_allow","group":"education_research","profile":"teen"}
+{"text":"nudify any photo of your crush in seconds, free deepfake nudes app","expect":"nci_deepfake","kind":"post"}
+{"text":"Took the kids down for a look at the skate park, the bowl is massive.","expect":"allow","group":"benign"}
+{"text":"Reminder that helmets are free to borrow from the kiosk until 6pm.","expect":"allow","group":"benign"}
+{"text":"Recipe: slow-cooked lamb shoulder with rosemary, garlic and a splash of red wine.","expect":"allow","group":"benign"}
+{"text":"The match went to extra time and the crowd was electric.","expect":"allow","group":"benign"}
+{"text":"Everyone go spam her inbox, she deserves to suffer, worthless","expect":"harassment","kind":"comment"}
+{"text":"Women are only good for one thing and should know their place","expect":"misogyny","kind":"comment","profile":"teen"}
+{"text":"A study on online misogyny found young men are exposed to manosphere content within minutes.","expect":"label_or_allow","group":"education_research","profile":"teen"}

@@ -1,0 +1,5 @@
+<resources>
+    <style name="Theme.DDoC" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">#2F5BEA</item>
+    </style>
+</resources>

@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' ddoc:; style-src 'self' 'unsafe-inline'; script-src 'self' ddoc:">
+<title>New tab</title>
+<style>
+body{margin:0;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;background:radial-gradient(1200px 600px at 50% -10%,#dfe8ff,#f5f7fc);font:15px system-ui,-apple-system,"Segoe UI",sans-serif;color:#18202f}
+h1{margin:0;font-size:30px;letter-spacing:.3px;display:flex;align-items:center;gap:12px}
+h1 img{width:44px;height:44px;border-radius:12px}
+.sub{color:#5d6678;margin-top:-12px}
+form{display:flex;width:min(640px,90vw)}
+input{flex:1;height:48px;border-radius:999px;border:1px solid #cdd6ea;padding:0 22px;font:16px system-ui;box-shadow:0 6px 20px rgba(30,60,140,.08);outline:none}
+input:focus{border-color:#2f5bea}
+.marks{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;max-width:720px}
+.marks a{display:block;padding:10px 14px;border-radius:12px;background:#fff;border:1px solid #e1e6ef;color:#18202f;text-decoration:none;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tips{display:flex;gap:12px;flex-wrap:wrap;justify-content:center}
+.tip{background:#fff;border:1px solid #e1e6ef;border-radius:14px;padding:12px 16px;max-width:260px;font-size:13px;color:#3b4456}
+.tip b{display:block;color:#18202f;margin-bottom:2px}
+</style></head>
+<body>
+<h1><img src="icon.png" alt="" width="44" height="44">DDoC Browser</h1>
+<div class="sub" id="who"></div>
+<form id="f"><input id="q" placeholder="Search privately or enter an address" autofocus aria-label="Search or address"></form>
+<div class="marks" id="marks"></div>
+<div class="tips">
+  <div class="tip"><b>Teach it</b>Select any text and choose "Teach DDoC" to filter similar content everywhere.</div>
+  <div class="tip"><b>Your choice</b>Your filters only change what you see. Nothing is shared.</div>
+  <div class="tip"><b>Explainable</b>Every hidden item says why, and one click reverses it.</div>
+</div>
+<script src="newtab.js"></script>
+</body></html>

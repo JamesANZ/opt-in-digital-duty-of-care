@@ -1,0 +1,27 @@
+# Generate the Xcode project with: brew install xcodegen && xcodegen
+name: DDoCBrowser
+options:
+  bundleIdPrefix: au.ddoc
+  deploymentTarget: { iOS: "16.0" }
+targets:
+  DDoCBrowser:
+    type: application
+    platform: iOS
+    sources:
+      - path: DDoCBrowser
+        excludes: ["Resources/**"]
+      - path: DDoCBrowser/Resources/ddoc
+        type: folder
+        buildPhase: resources
+    info:
+      path: DDoCBrowser/Info.plist
+      properties:
+        CFBundleDisplayName: DDoC Browser
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: au.ddoc.browser
+        SWIFT_VERSION: "5.9"
+        # Default-browser entitlement (com.apple.developer.web-browser) must be requested from Apple.
+        CODE_SIGN_ENTITLEMENTS: DDoCBrowser/DDoCBrowser.entitlements

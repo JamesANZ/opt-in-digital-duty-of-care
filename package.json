@@ -1,0 +1,24 @@
+{
+  "name": "ddoc-browser",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "packages/*",
+    "apps/desktop"
+  ],
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "vitest run",
+    "eval": "node scripts/eval.mjs",
+    "start": "npm run build && npm --workspace apps/desktop start"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "esbuild": "^0.24.2",
+    "typescript": "5.6",
+    "vitest": "2.1"
+  },
+  "dependencies": {
+    "@typesafe-ai/sdk": "^0.7.0"
+  }
+}
