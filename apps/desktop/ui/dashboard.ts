@@ -1,46 +1,103 @@
 /* DDoC Safety Dashboard. Shared UI logic; on mobile the same file runs against the native bridge. */
-const A = window.ddocAdmin;
-const main = document.getElementById('main');
-const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const ago = (ts) => { const s = (Date.now() - ts) / 1000; return s < 60 ? 'just now' : s < 3600 ? `${Math.floor(s / 60)} min ago` : s < 86400 ? `${Math.floor(s / 3600)} h ago` : new Date(ts).toLocaleDateString(); };
-const ACTIONS = { allow: 'Allow', label: 'Label only', blur: 'Blur', hide: 'Hide', interstitial: 'Support screen', block_page: 'Block page' };
-const STAGE = { learned: 'Your examples', rule: 'On-device rule', jev: 'JEV', host: 'Site rule' };
-let S = null;
+import type { Action, CategorySetting, DesignRestrictions, JevMode, Profile, ProfileKind, Settings } from '../../../packages/core/src/profiles.ts';
+import type { Decision } from '../../../packages/core/src/engine.ts';
+import type { HarmCategory, HarmGroup } from '../../../packages/core/src/taxonomy.ts';
+import type { Example } from '../../../packages/core/src/learner.ts';
 
-async function call(method, params) {
+const admin = window.ddocAdmin;
+if (!admin) throw new Error('Dashboard bridge missing');
+const A = admin;
+
+const mainEl = document.getElementById('main');
+if (!mainEl) throw new Error('#main missing');
+const main: HTMLElement = mainEl;
+
+const ESC: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+const esc = (s: unknown) => String(s ?? '').replace(/[&<>"']/g, (c) => ESC[c] ?? c);
+const ago = (ts: number) => { const s = (Date.now() - ts) / 1000; return s < 60 ? 'just now' : s < 3600 ? `${Math.floor(s / 60)} min ago` : s < 86400 ? `${Math.floor(s / 3600)} h ago` : new Date(ts).toLocaleDateString(); };
+const ACTIONS: Record<string, string> = { allow: 'Allow', label: 'Label only', blur: 'Blur', hide: 'Hide', interstitial: 'Support screen', block_page: 'Block page' };
+const STAGE: Record<string, string> = { learned: 'Your examples', rule: 'On-device rule', jev: 'JEV', host: 'Site rule' };
+
+interface DashReport {
+  byCategory: Record<string, number>;
+  byStage: Record<string, number>;
+  overrides: number;
+  counters: { filtered: number; localDecided: number; jevSent: number };
+  learning: Record<string, { harmful: number; fine: number }>;
+}
+interface Bookmark { title?: string; url: string }
+interface HistoryItem { ts: number; title?: string; url: string }
+interface DownloadItem { name: string; path?: string; state: string; received: number }
+interface BrowserData { bookmarks: Bookmark[]; history: HistoryItem[]; downloads: DownloadItem[] }
+interface LockState { locked: boolean; hasPin: boolean }
+interface DashState {
+  profiles: Profile[];
+  settings: Settings;
+  categories: HarmCategory[];
+  examples: Example[];
+  decisions: Decision[];
+  report: DashReport;
+  jevActive: boolean;
+}
+
+let S: DashState | null = null;
+function state(): DashState {
+  if (!S) throw new Error('Dashboard state is not loaded');
+  return S;
+}
+
+async function call(method: string, params?: unknown): Promise<unknown> {
   try { return await A.call(method, params); }
   catch (e) {
-    if (/PIN/.test(e.message)) { if (await askPin()) return A.call(method, params); return null; }
-    alertBox(e.message); return null;
+    const message = e instanceof Error ? e.message : String(e);
+    if (/PIN/.test(message)) { if (await askPin()) return A.call(method, params); return null; }
+    alertBox(message); return null;
   }
 }
-function alertBox(msg) { const p = document.createElement('div'); p.className = 'panel err'; p.textContent = msg; main.prepend(p); setTimeout(() => p.remove(), 5000); }
+function alertBox(msg: string) {
+  const p = document.createElement('div');
+  p.className = 'panel err';
+  p.textContent = msg;
+  main.prepend(p);
+  setTimeout(() => p.remove(), 5000);
+}
 
-function askPin() {
+function askPin(): Promise<boolean> {
   return new Promise((resolve) => {
-    const m = document.getElementById('pin'); m.hidden = false;
-    const inp = document.getElementById('pin-input'); inp.value = ''; inp.focus();
-    document.getElementById('pin-err').textContent = '';
-    document.getElementById('pin-cancel').onclick = () => { m.hidden = true; resolve(false); };
-    document.getElementById('pin-form').onsubmit = async (e) => {
+    const m = document.getElementById('pin');
+    const inp = document.getElementById('pin-input');
+    const err = document.getElementById('pin-err');
+    const cancel = document.getElementById('pin-cancel');
+    const form = document.getElementById('pin-form');
+    if (!(m instanceof HTMLElement) || !(inp instanceof HTMLInputElement) || !err || !cancel || !(form instanceof HTMLFormElement)) {
+      resolve(false);
+      return;
+    }
+    m.hidden = false;
+    inp.value = '';
+    inp.focus();
+    err.textContent = '';
+    cancel.onclick = () => { m.hidden = true; resolve(false); };
+    form.onsubmit = async (e) => {
       e.preventDefault();
       const ok = await A.call('unlock', { pin: inp.value });
-      if (ok) { m.hidden = true; resolve(true); } else document.getElementById('pin-err').textContent = 'Incorrect PIN';
+      if (ok) { m.hidden = true; resolve(true); } else err.textContent = 'Incorrect PIN';
     };
   });
 }
 
-async function load() { S = await A.call('state'); }
+async function load() { S = await A.call('state') as DashState; }
 
-function bars(obj) {
+function bars(obj: Record<string, number>) {
   const entries = Object.entries(obj).sort((a, b) => b[1] - a[1]);
   if (!entries.length) return '<div class="empty">Nothing filtered yet.</div>';
   const max = Math.max(...entries.map((e) => e[1]));
   return '<div class="bars">' + entries.map(([k, v]) => `<div class="b"><span>${esc(STAGE[k] ?? k)}</span><div class="track"><div class="fill" style="width:${(v / max) * 100}%"></div></div><b>${v}</b></div>`).join('') + '</div>';
 }
 
-const views = {
+const views: Record<string, () => Promise<string>> = {
   async overview() {
+    const S = state();
     const r = S.report;
     const learned = Object.values(r.learning).reduce((a, b) => a + b.harmful + b.fine, 0);
     return `<h1>Safety overview</h1><p class="mute">Everything here stays on this device. Profile: <b>${esc(profile().name)}</b> (${esc(profile().kind)}).</p>
@@ -59,6 +116,7 @@ const views = {
   },
 
   async decisions() {
+    const S = state();
     const rows = S.decisions.slice(0, 300).map((d) => `<tr>
       <td>${ago(d.ts)}<br><small class="mute">${esc(d.host ?? '')}</small></td>
       <td><b>${esc(d.categoryLabel)}</b><br><span class="pill ${esc(d.action)}">${esc(ACTIONS[d.action])}</span> <span class="pill ${esc(d.stage)}">${esc(STAGE[d.stage] ?? d.stage)}</span></td>
@@ -70,22 +128,23 @@ const views = {
   },
 
   async learning() {
+    const S = state();
     const cats = S.categories;
-    const label = (id) => cats.find((c) => c.id === id)?.label ?? id;
+    const label = (id: string) => cats.find((c) => c.id === id)?.label ?? id;
     const rows = [...S.examples].reverse().map((e) => `<tr><td><span class="pill ${e.polarity === 'harmful' ? 'block_page' : 'interstitial'}">${e.polarity === 'harmful' ? 'Unwanted' : 'Fine'}</span></td>
       <td><b>${esc(label(e.categoryId))}</b><br><small class="mute">${esc(e.host ?? '')} · ${ago(e.createdAt)} · ${esc(e.source)}</small></td>
       <td class="quote">"${esc(e.text.slice(0, 240))}"${e.note ? `<br><small class="mute">Why: ${esc(e.note)}</small>` : ''}</td>
       <td><button class="danger" data-delex="${esc(e.id)}">Delete</button></td></tr>`).join('');
     const custom = cats.filter((c) => c.custom);
     const newest = custom[custom.length - 1]?.id ?? '';
-    const opt = (c) => `<option value="${esc(c.id)}" ${c.id === newest ? 'selected' : ''}>${esc(c.label)}${c.custom ? ' (yours)' : ''}</option>`;
+    const opt = (c: HarmCategory) => `<option value="${esc(c.id)}" ${c.id === newest ? 'selected' : ''}>${esc(c.label)}${c.custom ? ' (yours)' : ''}</option>`;
     const opts = [
       custom.length ? `<optgroup label="Your categories">${[...custom].reverse().map(opt).join('')}</optgroup>` : '<option value="">Choose a category</option>',
       `<optgroup label="Built-in">${cats.filter((c) => !c.custom).map(opt).join('')}</optgroup>`,
     ].join('');
     const prog = Object.entries(S.report.learning).map(([k, v]) => `<tr><td>${esc(label(k))}</td><td>${v.harmful}</td><td>${v.fine}</td></tr>`).join('');
     const mine = custom.length ? `<table><tbody>${[...custom].reverse().map((c) => {
-      const set = profile().categories[c.id] ?? { enabled: true, action: 'blur' };
+      const set = profile().categories[c.id] ?? { enabled: true, action: 'blur' as Action };
       return `<tr><td><b>${esc(c.label)}</b> <span class="pill ${esc(set.action)}">${esc(ACTIONS[set.action] ?? set.action)}</span>${set.enabled ? '' : ' <span class="mute">off</span>'}<br><small class="mute">${esc(c.description)}</small></td><td><button class="danger" data-delcat="${esc(c.id)}">Delete</button></td></tr>`;
     }).join('')}</tbody></table>` : '<div class="empty">No custom categories yet.</div>';
     return `<h1>Teach DDoC</h1><p class="mute">Select text on any page and choose <b>Teach DDoC</b>, or add an example here. DDoC finds similar content across every site using an on-device model. Negative examples ("this is fine") stop over-filtering.</p>
@@ -104,13 +163,14 @@ const views = {
   },
 
   async categories() {
+    const S = state();
     const p = profile();
-    const groups = { seriously_harmful: 'Seriously harmful (all ages)', harmful_to_children: 'Harmful to children', other: 'Ads, other filters & your categories' };
+    const groups: Record<HarmGroup, string> = { seriously_harmful: 'Seriously harmful (all ages)', harmful_to_children: 'Harmful to children', other: 'Ads, other filters & your categories' };
     let html = `<h1>Categories &amp; sensitivity</h1><p class="mute">For profile <b>${esc(p.name)}</b>. Categories follow the Digital Duty of Care Bill. Higher sensitivity catches more but may over-filter.</p>`;
-    for (const [g, title] of Object.entries(groups)) {
+    for (const [g, title] of Object.entries(groups) as [HarmGroup, string][]) {
       html += `<div class="panel"><h2 style="margin-top:0">${title}</h2>`;
       for (const c of S.categories.filter((x) => x.group === g)) {
-        const s = p.categories[c.id] ?? { enabled: false, sensitivity: 0.5, action: 'blur' };
+        const s: CategorySetting = p.categories[c.id] ?? { enabled: false, sensitivity: 0.5, action: 'blur' };
         html += `<div class="cat"><input type="checkbox" data-cat="${esc(c.id)}" data-f="enabled" ${s.enabled ? 'checked' : ''} aria-label="Enable ${esc(c.label)}">
           <div><b>${esc(c.label)}</b><small>${esc(c.billRef)}</small></div>
           <label class="row"><span class="mute">Sensitivity</span><input type="range" min="0" max="1" step="0.05" value="${s.sensitivity}" data-cat="${esc(c.id)}" data-f="sensitivity"></label>
@@ -123,7 +183,8 @@ const views = {
   },
 
   async profiles() {
-    const lock = await A.call('lockState');
+    const S = state();
+    const lock = await A.call('lockState') as LockState;
     const rows = S.profiles.map((p) => `<tr><td><b>${esc(p.name)}</b> ${p.id === S.settings.activeProfileId ? '<span class="pill interstitial">active</span>' : ''}</td><td>${esc(p.kind)}</td><td>${esc((p.ageBand ?? '').replace('_', '–'))}</td><td>${p.locked ? '🔒 PIN' : 'open'}</td>
       <td>${p.id === S.settings.activeProfileId ? '' : `<button data-switch="${esc(p.id)}">Switch to</button>`}</td></tr>`).join('');
     const p = profile();
@@ -141,7 +202,7 @@ const views = {
 
   async feeds() {
     const d = profile().design;
-    const sw = (k, t, sub) => `<label class="switch"><input type="checkbox" data-design="${k}" ${d[k] ? 'checked' : ''}><div><b>${t}</b><br><small class="mute">${sub}</small></div></label>`;
+    const sw = (k: keyof DesignRestrictions, t: string, sub: string) => `<label class="switch"><input type="checkbox" data-design="${k}" ${d[k] ? 'checked' : ''}><div><b>${t}</b><br><small class="mute">${sub}</small></div></label>`;
     return `<h1>Feed controls</h1><p class="mute">User-side versions of the Bill's design-feature protections and "My Feed, My Way". Works on supported sites (X, YouTube, Reddit, Instagram, Facebook, TikTok); platforms still control their own ranking.</p>
       <div class="panel">
         ${sw('preferFollowingFeed', 'Following-only feed', 'Switch to the Following or Subscriptions feed instead of the algorithmic one where the site offers it.')}
@@ -155,7 +216,7 @@ const views = {
   },
 
   async privacy() {
-    const s = S.settings;
+    const s = state().settings;
     return `<h1>Privacy &amp; JEV</h1>
       <div class="panel"><h2 style="margin-top:0">How content is checked</h2>
         <label class="switch"><input type="radio" name="mode" value="off" ${s.jevMode === 'off' ? 'checked' : ''}><div><b>On-device only</b><br><small class="mute">Your examples and safety rules only. Nothing is sent anywhere.</small></div></label>
@@ -174,7 +235,7 @@ const views = {
   },
 
   async law() {
-    const rows = [
+    const rows: [string, string, string][] = [
       ['Seriously harmful material: CSEA, grooming, sexual violence, extreme violence, terrorism, suicide/self-harm, threats, harassment', 'full', 'Text classification via JEV + on-device rules; CSEA pages blocked with no reveal; support screens with help lines'],
       ['Material harmful to children: pornography, disordered eating, misogyny, crime glorification, dangerous stunts, bullying', 'full', 'Child and teen profiles with stricter defaults'],
       ['Under-16 design features: recommender systems, endless feeds, feedback features, time-limited content', 'partial', 'Feed controls on supported sites; cannot change server-side ranking'],
@@ -191,86 +252,149 @@ const views = {
   },
 
   async bookmarks() {
-    const d = await A.call('browserData');
+    const d = await A.call('browserData') as BrowserData;
     return `<h1>Bookmarks</h1><div class="panel">${d.bookmarks.length ? `<table><tbody>${d.bookmarks.map((b) => `<tr><td><a href="#" data-open="${esc(b.url)}">${esc(b.title || b.url)}</a><br><small class="mute">${esc(b.url)}</small></td><td><button class="danger" data-unbm="${esc(b.url)}">Remove</button></td></tr>`).join('')}</tbody></table>` : '<div class="empty">No bookmarks yet. Press ☆ in the toolbar.</div>'}</div>`;
   },
   async history() {
-    const d = await A.call('browserData');
+    const d = await A.call('browserData') as BrowserData;
     return `<h1>History</h1><div class="row"><button class="danger" id="hist-clear">Clear history</button></div><div class="panel">${d.history.length ? `<table><tbody>${d.history.slice(0, 500).map((h) => `<tr><td>${ago(h.ts)}</td><td><a href="#" data-open="${esc(h.url)}">${esc(h.title || h.url)}</a><br><small class="mute">${esc(h.url)}</small></td></tr>`).join('')}</tbody></table>` : '<div class="empty">No history.</div>'}</div>`;
   },
   async downloads() {
-    const d = await A.call('browserData');
+    const d = await A.call('browserData') as BrowserData;
     return `<h1>Downloads</h1><div class="panel">${d.downloads.length ? `<table><tbody>${d.downloads.map((x) => `<tr><td><b>${esc(x.name)}</b><br><small class="mute">${esc(x.state)} · ${Math.round(x.received / 1024)} KB</small></td><td>${x.path ? `<button data-show="${esc(x.path)}">Show in folder</button>` : ''}</td></tr>`).join('')}</tbody></table>` : '<div class="empty">No downloads this session.</div>'}</div>`;
   },
 };
 
-function profile() { return S.profiles.find((p) => p.id === S.settings.activeProfileId) ?? S.profiles[0]; }
+function profile() {
+  const S = state();
+  return S.profiles.find((p) => p.id === S.settings.activeProfileId) ?? S.profiles[0]!;
+}
 
 async function route() {
   const v = (location.hash || '#overview').slice(1);
   document.querySelectorAll('#nav a').forEach((a) => a.classList.toggle('on', a.getAttribute('href') === '#' + v));
   await load();
-  document.getElementById('who').innerHTML = `Profile: <b>${esc(profile().name)}</b><br><small>${esc(profile().kind)}${profile().locked ? ' · protected' : ''}</small>`;
-  main.innerHTML = await (views[v] ?? views.overview)();
+  const who = document.getElementById('who');
+  if (who) who.innerHTML = `Profile: <b>${esc(profile().name)}</b><br><small>${esc(profile().kind)}${profile().locked ? ' · protected' : ''}</small>`;
+  const view = views[v] ?? views.overview;
+  if (!view) return;
+  main.innerHTML = await view();
   wire();
   main.focus();
 }
 
 function wire() {
-  const $ = (id) => document.getElementById(id);
-  const on = (sel, fn) => main.querySelectorAll(sel).forEach((el) => fn(el));
-  on('[data-go]', (b) => b.onclick = () => { location.hash = b.dataset.go; });
-  on('#exp', (b) => b.onclick = () => A.call('exportReport'));
-  on('[data-ov]', (b) => b.onclick = async () => { await call('override', { id: b.dataset.ov, kind: b.dataset.k }); route(); });
-  on('#clear-dec', (b) => b.onclick = async () => { await call('clearDecisions'); route(); });
-  on('[data-delex]', (b) => b.onclick = async () => { await call('deleteExample', { id: b.dataset.delex }); route(); });
-  on('#ex-form', (f) => f.onsubmit = async (e) => {
-    e.preventDefault();
-    const t = $('ex-text').value.trim();
-    const categoryId = $('ex-cat').value;
-    if (!t) return alertBox('Paste an example first.');
-    if (!categoryId) return alertBox('Choose a category. Create one below if the built-in list does not fit.');
-    if ((await call('tagExample', { text: t, categoryId, polarity: $('ex-pol').value, note: $('ex-note').value })) !== null) route();
+  const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T | null;
+  const on = (sel: string, fn: (el: HTMLElement) => void) => main.querySelectorAll<HTMLElement>(sel).forEach(fn);
+  const input = (id: string) => {
+    const node = document.getElementById(id);
+    if (!(node instanceof HTMLInputElement) && !(node instanceof HTMLTextAreaElement) && !(node instanceof HTMLSelectElement)) throw new Error(`#${id} missing`);
+    return node;
+  };
+  on('[data-go]', (b) => { b.onclick = () => { location.hash = b.dataset.go ?? ''; }; });
+  on('#exp', (b) => { b.onclick = () => { void A.call('exportReport'); }; });
+  on('[data-ov]', (b) => { b.onclick = async () => { await call('override', { id: b.dataset.ov, kind: b.dataset.k }); void route(); }; });
+  on('#clear-dec', (b) => { b.onclick = async () => { await call('clearDecisions'); void route(); }; });
+  on('[data-delex]', (b) => { b.onclick = async () => { await call('deleteExample', { id: b.dataset.delex }); void route(); }; });
+  on('#ex-form', (f) => {
+    f.onsubmit = async (e) => {
+      e.preventDefault();
+      const t = input('ex-text').value.trim();
+      const categoryId = input('ex-cat').value;
+      if (!t) return alertBox('Paste an example first.');
+      if (!categoryId) return alertBox('Choose a category. Create one below if the built-in list does not fit.');
+      const polarity = input('ex-pol').value === 'fine' ? 'fine' : 'harmful';
+      if ((await call('tagExample', { text: t, categoryId, polarity, note: input('ex-note').value })) !== null) void route();
+    };
   });
-  on('#cc-form', (f) => f.onsubmit = async (e) => {
-    e.preventDefault();
-    const l = $('cc-label').value.trim();
-    if (!l) return alertBox('Enter a name for the category.');
-    if ((await call('addCustomCategory', { label: l, description: $('cc-desc').value.trim() || l })) !== null) route();
+  on('#cc-form', (f) => {
+    f.onsubmit = async (e) => {
+      e.preventDefault();
+      const l = input('cc-label').value.trim();
+      if (!l) return alertBox('Enter a name for the category.');
+      if ((await call('addCustomCategory', { label: l, description: input('cc-desc').value.trim() || l })) !== null) void route();
+    };
   });
-  on('[data-cat]', (el) => el.onchange = async () => {
-    const f = el.dataset.f; const v = f === 'enabled' ? el.checked : f === 'sensitivity' ? Number(el.value) : el.value;
-    if ((await call('updateSetting', { profileId: profile().id, categoryId: el.dataset.cat, patch: { [f]: v } })) === null) route();
+  on('[data-cat]', (el) => {
+    el.onchange = async () => {
+      const field = el.dataset.f ?? '';
+      const control = el as HTMLInputElement;
+      const v = field === 'enabled' ? control.checked : field === 'sensitivity' ? Number(control.value) : control.value;
+      if ((await call('updateSetting', { profileId: profile().id, categoryId: el.dataset.cat, patch: { [field]: v } })) === null) void route();
+    };
   });
-  on('[data-delcat]', (b) => b.onclick = async () => { await call('removeCustomCategory', { id: b.dataset.delcat }); route(); });
-  on('[data-switch]', (b) => b.onclick = async () => {
-    const ls = await A.call('lockState');
-    let pin = '';
-    if (ls.locked) { if (!(await askPin())) return; pin = document.getElementById('pin-input').value; }
-    await A.call('switchProfile', { profileId: b.dataset.switch, pin }).catch((x) => alertBox(x.message));
-    route();
+  on('[data-delcat]', (b) => { b.onclick = async () => { await call('removeCustomCategory', { id: b.dataset.delcat }); void route(); }; });
+  on('[data-switch]', (b) => {
+    b.onclick = async () => {
+      const ls = await A.call('lockState') as LockState;
+      let pin = '';
+      if (ls.locked) {
+        if (!(await askPin())) return;
+        pin = (document.getElementById('pin-input') as HTMLInputElement | null)?.value ?? '';
+      }
+      await A.call('switchProfile', { profileId: b.dataset.switch, pin }).catch((x: unknown) => alertBox(x instanceof Error ? x.message : String(x)));
+      void route();
+    };
   });
-  on('#np-add', (b) => b.onclick = async () => { const n = $('np-name').value.trim(); if (!n) return; await call('addProfile', { name: n, kind: $('np-kind').value }); route(); });
-  on('#pin-set', (b) => b.onclick = async () => { const n = $('pin-new').value; if (n.length < 4) return alertBox('PIN must be at least 4 digits'); if (await call('setPin', { pin: n, oldPin: $('pin-old')?.value })) route(); });
-  on('#sites-save', (b) => b.onclick = async () => {
-    const lines = (id) => $(id).value.split('\n').map((s) => s.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '')).filter(Boolean);
-    await call('updateProfile', { profileId: profile().id, patch: { blockedHosts: lines('blocked'), allowedHosts: lines('allowed'), allowPrivateWindows: $('priv').checked } }); route();
+  on('#np-add', (b) => {
+    b.onclick = async () => {
+      const n = input('np-name').value.trim();
+      if (!n) return;
+      const kind = input('np-kind').value as ProfileKind;
+      await call('addProfile', { name: n, kind });
+      void route();
+    };
   });
-  on('[data-design]', (el) => el.onchange = async () => { if ((await call('updateDesign', { profileId: profile().id, patch: { [el.dataset.design]: el.checked } })) === null) route(); });
-  on('#limit', (el) => el.onchange = () => call('updateDesign', { profileId: profile().id, patch: { scrollLimit: Number(el.value) } }));
-  on('input[name=mode]', (el) => el.onchange = () => call('setSettings', { jevMode: el.value }));
-  on('#jev-save', (b) => b.onclick = async () => {
-    const p = { jevBaseURL: $('base').value.trim(), jevModel: $('model').value.trim(), shareExamplesWithJev: $('share').checked, imageChecks: $('img').checked };
-    if ($('key').value.trim()) p.jevApiKey = $('key').value.trim();
-    await call('setSettings', p); route();
+  on('#pin-set', (b) => {
+    b.onclick = async () => {
+      const n = input('pin-new').value;
+      if (n.length < 4) return alertBox('PIN must be at least 4 digits');
+      const old = $('pin-old');
+      if (await call('setPin', { pin: n, oldPin: old instanceof HTMLInputElement ? old.value : undefined })) void route();
+    };
   });
-  on('#wipe', (b) => b.onclick = async () => { if (confirmBox()) { await call('wipe'); route(); } });
-  on('#hist-clear', (b) => b.onclick = async () => { await A.call('clearHistory'); route(); });
-  on('[data-open]', (a) => a.onclick = (e) => { e.preventDefault(); A.chrome('newTab', a.dataset.open); });
-  on('[data-unbm]', (b) => b.onclick = async () => { await A.call('removeBookmark', { url: b.dataset.unbm }); route(); });
-  on('[data-show]', (b) => b.onclick = () => A.chrome('openDownload', b.dataset.show));
+  on('#sites-save', (b) => {
+    b.onclick = async () => {
+      const lines = (id: string) => input(id).value.split('\n').map((s) => s.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '')).filter(Boolean);
+      const priv = document.getElementById('priv');
+      await call('updateProfile', { profileId: profile().id, patch: { blockedHosts: lines('blocked'), allowedHosts: lines('allowed'), allowPrivateWindows: priv instanceof HTMLInputElement && priv.checked } });
+      void route();
+    };
+  });
+  on('[data-design]', (el) => {
+    const box = el as HTMLInputElement;
+    box.onchange = async () => {
+      const key = box.dataset.design;
+      if (!key) return;
+      if ((await call('updateDesign', { profileId: profile().id, patch: { [key]: box.checked } })) === null) void route();
+    };
+  });
+  on('#limit', (el) => { (el as HTMLInputElement).onchange = () => { void call('updateDesign', { profileId: profile().id, patch: { scrollLimit: Number((el as HTMLInputElement).value) } }); }; });
+  on('input[name=mode]', (el) => {
+    const radio = el as HTMLInputElement;
+    radio.onchange = () => { void call('setSettings', { jevMode: radio.value as JevMode }); };
+  });
+  on('#jev-save', (b) => {
+    b.onclick = async () => {
+      const p: { jevBaseURL: string; jevModel: string; shareExamplesWithJev: boolean; imageChecks: boolean; jevApiKey?: string } = {
+        jevBaseURL: input('base').value.trim(),
+        jevModel: input('model').value.trim(),
+        shareExamplesWithJev: (document.getElementById('share') as HTMLInputElement).checked,
+        imageChecks: (document.getElementById('img') as HTMLInputElement).checked,
+      };
+      const key = input('key').value.trim();
+      if (key) p.jevApiKey = key;
+      await call('setSettings', p);
+      void route();
+    };
+  });
+  on('#wipe', (b) => { b.onclick = async () => { if (confirmBox()) { await call('wipe'); void route(); } }; });
+  on('#hist-clear', (b) => { b.onclick = async () => { await A.call('clearHistory'); void route(); }; });
+  on('[data-open]', (a) => { a.onclick = (e) => { e.preventDefault(); A.chrome('newTab', a.dataset.open); }; });
+  on('[data-unbm]', (b) => { b.onclick = async () => { await A.call('removeBookmark', { url: b.dataset.unbm }); void route(); }; });
+  on('[data-show]', (b) => { b.onclick = () => A.chrome('openDownload', b.dataset.show); });
 }
 function confirmBox() { return window.confirm('Delete everything DDoC has learned and its decision log? This cannot be undone.'); }
 
-window.addEventListener('hashchange', route);
-route();
+window.addEventListener('hashchange', () => { void route(); });
+void route();

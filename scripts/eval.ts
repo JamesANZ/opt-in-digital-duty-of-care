@@ -1,37 +1,49 @@
 /**
  * Accuracy and over-blocking evaluation.
- *   TYPESAFE_API_KEY=... node scripts/eval.mjs   -> evaluates against the real JEV
- *   node scripts/eval.mjs                        -> pipeline check against the MOCK JEV (not an accuracy claim)
- *   node scripts/eval.mjs --local                -> on-device stages only
+ *   TYPESAFE_API_KEY=... node --experimental-strip-types scripts/eval.ts   -> evaluates against the real JEV
+ *   node --experimental-strip-types scripts/eval.ts                        -> pipeline check against the MOCK JEV (not an accuracy claim)
+ *   node --experimental-strip-types scripts/eval.ts --local                -> on-device stages only
  * CSEA material is deliberately excluded from the eval set.
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import { build } from 'esbuild';
-import { startMockJev } from './mock-jev.mjs';
-import { loadEnv } from './load-env.mjs';
+import { startMockJev } from './mock-jev.ts';
+import { loadEnv } from './load-env.ts';
+import type { EngineState } from '../packages/core/src/engine.ts';
+import type { ProfileKind } from '../packages/core/src/profiles.ts';
+import type { JevConfig } from '../packages/core/src/jev.ts';
 
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 loadEnv([path.join(root, '.env')]);
 const out = path.join(root, 'dist/eval-core.mjs');
 await build({ entryPoints: [path.join(root, 'packages/core/src/index.ts')], outfile: out, bundle: true, format: 'esm', platform: 'node', logLevel: 'warning' });
-const core = await import(out);
+interface EvalCore {
+  JevClient: new (cfg: JevConfig) => unknown;
+  defaultState(): EngineState;
+  makeProfile(id: string, name: string, kind: ProfileKind): EngineState['profiles'][number];
+  Engine: new (state: EngineState, classifier?: unknown) => {
+    classify(block: { text: string; kind: string }): Promise<{ action: string; categoryId?: string }>;
+  };
+}
+const core = await import(out) as EvalCore;
 
 const local = process.argv.includes('--local');
 const real = !!process.env.TYPESAFE_API_KEY && !local;
-let srv;
+let srv: Awaited<ReturnType<typeof startMockJev>> | undefined;
 if (!real && !local) srv = await startMockJev(4788);
 const classifier = local ? undefined : new core.JevClient(real
   ? { apiKey: process.env.TYPESAFE_API_KEY, baseURL: process.env.TYPESAFE_BASE_URL }
   : { apiKey: 'mock', baseURL: 'http://127.0.0.1:4788' });
 
-const rows = fs.readFileSync(path.join(root, 'eval/dataset.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
-const res = { tp: 0, fn: 0, fp: 0, tn: 0, protectedHidden: 0, protectedTotal: 0, misses: [], falsePos: [] };
+interface EvalRow { text: string; expect: string; profile?: string; kind?: string }
+const rows = fs.readFileSync(path.join(root, 'eval/dataset.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l) as EvalRow);
+const res: { tp: number; fn: number; fp: number; tn: number; protectedHidden: number; protectedTotal: number; misses: { text: string; expect: string; got: string }[]; falsePos: { text: string; got: string }[] } = { tp: 0, fn: 0, fp: 0, tn: 0, protectedHidden: 0, protectedTotal: 0, misses: [], falsePos: [] };
 for (const r of rows) {
   const s = core.defaultState();
   s.settings.jevMode = 'all';
   const kind = r.profile ?? 'adult';
-  if (kind !== 'adult') { s.profiles.push(core.makeProfile('p', 'p', kind)); s.settings.activeProfileId = 'p'; }
+  if (kind !== 'adult') { s.profiles.push(core.makeProfile('p', 'p', kind as ProfileKind)); s.settings.activeProfileId = 'p'; }
   const e = new core.Engine(s, classifier);
   const d = await e.classify({ text: r.text, kind: r.kind ?? 'post' });
   const filtered = d.action !== 'allow';

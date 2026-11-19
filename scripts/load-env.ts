@@ -4,8 +4,8 @@
  */
 import fs from 'node:fs';
 
-export function loadEnv(files) {
-  const merged = {};
+export function loadEnv(files: readonly string[]): void {
+  const merged: Record<string, string> = {};
   for (const file of files) {
     if (!file || !fs.existsSync(file)) continue;
     for (const raw of fs.readFileSync(file, 'utf8').split('\n')) {

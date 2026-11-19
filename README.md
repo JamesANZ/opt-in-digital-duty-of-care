@@ -16,7 +16,7 @@ Your filters change only what *you* see. Nothing is shared, host block lists are
 | **Android** app (Kotlin, WebView + androidx.webkit, Keystore-encrypted state) | `apps/android` | Source complete; build with Android SDK |
 | **iOS** app (SwiftUI, WKWebView with an isolated content world, Keychain + CryptoKit) | `apps/ios` | Source complete; build with Xcode on macOS |
 | Legislative mapping, architecture, privacy, risk assessment, roadmap | `docs/` | Done |
-| Evaluation set and harness (recall + over-blocking of protected expression) | `eval/`, `scripts/eval.mjs` | Done |
+| Evaluation set and harness (recall + over-blocking of protected expression) | `eval/`, `scripts/eval.ts` | Done |
 
 ## Quick start (desktop)
 
@@ -27,12 +27,12 @@ npm test
 npm start                      # launches DDoC Browser
 ```
 
-JEV: set your TypeSafe key in **Safety Dashboard > Privacy & JEV**, or copy `.env.example` to `.env` and fill in `TYPESAFE_API_KEY`. The desktop app loads that file and `apps/desktop/.env` (the desktop file wins). `scripts/eval.mjs` loads the repo-root file. A shell export wins over either file. Without a key, harm checks stay on-device and the ads filter does nothing until JEV is configured. Android and iOS do not read `.env`; their `.env.example` files say to set the key in the dashboard. Profiles saved before the ads filter existed pick it up the next time the engine starts.
+JEV: set your TypeSafe key in **Safety Dashboard > Privacy & JEV**, or copy `.env.example` to `.env` and fill in `TYPESAFE_API_KEY`. The desktop app loads that file and `apps/desktop/.env` (the desktop file wins). `scripts/eval.ts` loads the repo-root file. A shell export wins over either file. Without a key, harm checks stay on-device and the ads filter does nothing until JEV is configured. Android and iOS do not read `.env`; their `.env.example` files say to set the key in the dashboard. Profiles saved before the ads filter existed pick it up the next time the engine starts.
 
 Demo with the bundled test forum and a *mock* JEV server (heuristic stand-in, for offline demos only):
 
 ```bash
-node scripts/mock-jev.mjs &
+node --experimental-strip-types scripts/mock-jev.ts &
 DDOC_DEMO=1 TYPESAFE_API_KEY=mock TYPESAFE_BASE_URL=http://127.0.0.1:4778 npm --workspace apps/desktop start
 ```
 
@@ -56,8 +56,8 @@ Packaging: `npm --workspace apps/desktop run dist:win | dist:mac | dist:linux` (
 ## Evaluation
 
 ```bash
-node scripts/eval.mjs --local           # on-device stages only
-TYPESAFE_API_KEY=... node scripts/eval.mjs   # real JEV accuracy
+node --experimental-strip-types scripts/eval.ts --local           # on-device stages only
+TYPESAFE_API_KEY=... node --experimental-strip-types scripts/eval.ts   # real JEV accuracy
 ```
 
 On the bundled 30-item set, on-device only: 75% recall on harmful items, 0% over-blocking of protected or benign items. Real-JEV numbers need your API key; the mock-server run only checks the plumbing and is not an accuracy result. The set is small and is a starting point, not a benchmark.

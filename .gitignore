@@ -5,6 +5,8 @@ apps/desktop/.env
 apps/desktop/.env.local
 dist/
 apps/desktop/dist/
+apps/desktop/ui/*.js
+packages/mobile-shared/*.js
 apps/android/app/src/main/assets/ddoc/
 apps/ios/DDoCBrowser/Resources/ddoc/
 apps/android/.gradle/

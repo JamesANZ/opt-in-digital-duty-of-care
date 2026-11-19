@@ -8,7 +8,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { Engine, EngineState, defaultState, EncryptedStore, handle, JevClient, randomKey, checkUrl, b64e, b64d } from '../../../packages/core/src';
-import { loadEnv } from '../../../scripts/load-env.mjs';
+import { loadEnv } from '../../../scripts/load-env.ts';
 
 // dist/main.js -> apps/desktop/.env, then the repo-root .env. Shell wins; desktop file wins over root.
 loadEnv([

@@ -3,14 +3,20 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
-const r = (p) => path.join(root, p);
-const common = { bundle: true, sourcemap: false, logLevel: 'warning', legalComments: 'none' };
+const r = (p: string) => path.join(root, p);
+const common = { bundle: true, sourcemap: false, logLevel: 'warning' as const, legalComments: 'none' as const };
 
 // Desktop (Electron)
 await build({ ...common, entryPoints: [r('apps/desktop/src/main.ts')], outfile: r('apps/desktop/dist/main.js'), platform: 'node', format: 'cjs', target: 'node20', external: ['electron'] });
-for (const p of ['page-preload', 'chrome-preload']) {
-  await build({ ...common, entryPoints: [r(`apps/desktop/src/${p}.ts`)], outfile: r(`apps/desktop/dist/${p}.js`), platform: 'browser', format: 'cjs', target: 'chrome120', external: ['electron'] });
+for (const name of ['page-preload', 'chrome-preload']) {
+  await build({ ...common, entryPoints: [r(`apps/desktop/src/${name}.ts`)], outfile: r(`apps/desktop/dist/${name}.js`), platform: 'browser', format: 'cjs', target: 'chrome120', external: ['electron'] });
 }
+
+// Browser UI. HTML keeps <script src="*.js">; these files are the compiled output.
+for (const name of ['chrome', 'newtab', 'dashboard', 'blocked']) {
+  await build({ ...common, entryPoints: [r(`apps/desktop/ui/${name}.ts`)], outfile: r(`apps/desktop/ui/${name}.js`), platform: 'browser', format: 'iife', target: 'chrome120' });
+}
+await build({ ...common, entryPoints: [r('packages/mobile-shared/admin-shim.ts')], outfile: r('packages/mobile-shared/admin-shim.js'), platform: 'browser', format: 'iife', target: ['chrome100', 'safari15'] });
 
 // Shared bundles for mobile shells
 const shared = r('dist/shared');
