@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "description": "Digital Duty of Care Browser: privacy-first, AI-powered personal safety browser",
   "main": "dist/main.js",
-  "license": "MPL-2.0",
+  "license": "MIT",
   "scripts": {
     "start": "electron .",
     "dist:win": "electron-builder --win",

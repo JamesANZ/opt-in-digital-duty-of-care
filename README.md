@@ -68,4 +68,4 @@ See `docs/LEGISLATIVE_MAPPING.md` section 4. In short: a browser cannot change p
 
 ## Licence
 
-MPL-2.0 (proposed, matching most browser forks). See `LICENSE`.
+MIT. See `LICENSE`.
